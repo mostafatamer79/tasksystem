@@ -58,12 +58,17 @@ describe('BalancedAssignmentStrategy', () => {
     });
   });
 
-  it('only counts active (non-completed) tasks', async () => {
+  it('counts active tasks and tasks completed today', async () => {
     const { tx, groupBy } = makeTx([{ id: 'a' }], []);
     await strategy.resolveAssignee(tx);
     expect(groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ status: { not: 'COMPLETED' } }),
+        where: expect.objectContaining({
+          OR: [
+            { status: { not: 'COMPLETED' } },
+            { status: 'COMPLETED', updatedAt: { gte: expect.any(Date) } },
+          ],
+        }),
       }),
     );
   });

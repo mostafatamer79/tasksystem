@@ -19,11 +19,17 @@ export class BalancedAssignmentStrategy implements AssignmentStrategy {
       throw new BadRequestException('No active employees available for balanced assignment');
     }
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const counts = await tx.task.groupBy({
       by: ['assignedToId'],
       where: {
         assignedToId: { in: employees.map((e) => e.id) },
-        status: { not: TaskStatus.COMPLETED },
+        OR: [
+          { status: { not: TaskStatus.COMPLETED } },
+          { status: TaskStatus.COMPLETED, updatedAt: { gte: startOfToday } },
+        ],
       },
       _count: { _all: true },
     });
