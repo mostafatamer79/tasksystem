@@ -125,9 +125,7 @@ function LoginForm() {
         </div>
       </motion.div>
 
-      <motion.p variants={item} className="mt-6 text-center text-xs text-muted-foreground">
-        Demo: <span className="font-medium text-foreground">admin@example.com</span> / Admin123!
-      </motion.p>
+
     </motion.div>
   );
 }
