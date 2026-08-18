@@ -54,6 +54,40 @@ export const updateTaskSchema = z.object({
 });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
+export const createCommentSchema = z.object({
+  body: z.string().min(1, 'Comment body is required').max(2000),
+});
+
+export const planTaskSchema = z.object({
+  date: z.string().min(1, 'Date is required'),
+  dayName: z.string().optional(),
+  title: z.string().min(1, 'Title is required').max(200),
+  content: z.string().optional(),
+  material: z.string().optional(),
+  notes: z.string().optional(),
+  isReady: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  taskId: z.string().uuid().optional(),
+});
+
+export const createPlanSchema = z.object({
+  title: z.string().min(1, 'Plan title is required').max(200),
+  teacherName: z.string().min(1, 'Teacher name is required'),
+  description: z.string().optional(),
+  periodStart: z.string().optional().nullable(),
+  periodEnd: z.string().optional().nullable(),
+  tasks: z.array(planTaskSchema).optional(),
+});
+
+export const returnPlanSchema = z.object({
+  note: z.string().optional(),
+});
+
+export type CreatePlanInput = z.infer<typeof createPlanSchema>;
+export type UpdatePlanInput = z.infer<typeof createPlanSchema>;
+export type CreatePlanTaskInput = z.infer<typeof planTaskSchema>;
+export type UpdatePlanTaskInput = z.infer<typeof planTaskSchema>;
+
 export const commentSchema = z.object({
   body: z.string().min(1, 'Comment cannot be empty').max(2000),
 });
@@ -64,7 +98,7 @@ export const returnTaskSchema = z.object({
 });
 export type ReturnTaskInput = z.infer<typeof returnTaskSchema>;
 
-const roleEnum = z.enum(['ADMIN', 'EMPLOYEE']);
+const roleEnum = z.enum(['ADMIN', 'MODERATOR', 'EMPLOYEE']);
 
 export const createUserSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -73,6 +107,8 @@ export const createUserSchema = z.object({
   role: roleEnum,
   department: z.string().optional(),
   position: z.string().optional(),
+  workStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Use HH:mm format').optional(),
+  workEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Use HH:mm format').optional(),
 });
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
@@ -83,6 +119,8 @@ export const updateUserSchema = z.object({
   department: z.string().optional(),
   position: z.string().optional(),
   isActive: z.boolean().optional(),
+  workStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  workEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 

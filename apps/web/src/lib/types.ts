@@ -1,11 +1,12 @@
 // Types mirroring the backend API contract (apps/api).
 
-export type Role = 'ADMIN' | 'EMPLOYEE';
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'TESTING' | 'COMPLETED' | 'RETURNED';
+export const ROLES = ['ADMIN', 'EMPLOYEE', 'MODERATOR'] as const;
+export type Role = (typeof ROLES)[number];
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'TESTING' | 'COMPLETED' | 'RETURNED' | 'PUBLISHED';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type AssignmentMode = 'MANUAL' | 'BALANCED';
 
-export const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'TESTING', 'COMPLETED', 'RETURNED'];
+export const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'TESTING', 'COMPLETED', 'RETURNED', 'PUBLISHED'];
 export const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 export interface User {
@@ -16,6 +17,8 @@ export interface User {
   department: string | null;
   position: string | null;
   avatarUrl: string | null;
+  workStartTime: string;
+  workEndTime: string;
   isActive?: boolean;
   createdAt?: string;
 }
@@ -86,6 +89,62 @@ export interface Paginated<T> {
   totalPages: number;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export type PlanStatus = 'DRAFT' | 'SUBMITTED' | 'PUBLISHED' | 'RETURNED';
+export const PLAN_STATUSES: PlanStatus[] = ['DRAFT', 'SUBMITTED', 'PUBLISHED', 'RETURNED'];
+
+export interface PlanTask {
+  id: string;
+  planId: string;
+  sortOrder: number;
+  date: string;
+  dayName: string | null;
+  title: string;
+  content: string | null;
+  material: string | null;
+  notes: string | null;
+  isReady: boolean;
+  taskId?: string | null;
+  task?: Task;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Plan {
+  id: string;
+  title: string;
+  teacherName: string;
+  description: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  status: PlanStatus;
+  returnNote: string | null;
+  createdById: string;
+  createdBy: { id: string; name: string; email: string; avatarUrl: string | null };
+  reviewedById: string | null;
+  reviewedBy: { id: string; name: string } | null;
+  publishedAt: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  tasks: PlanTask[];
+}
+
+export interface PlanQuery {
+  page?: number;
+  limit?: number;
+  status?: PlanStatus;
+  createdById?: string;
+  search?: string;
+}
+
 export interface NotificationsPage extends Paginated<AppNotification> {
   unread: number;
 }
@@ -122,10 +181,44 @@ export interface EmployeeStats {
   averageProgress: number;
 }
 
+export interface EmployeeTaskStats {
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  position: string | null;
+  avatarUrl: string | null;
+  totalTasks: number;
+  todoTasks: number;
+  inProgressTasks: number;
+  testingTasks: number;
+  completedTasks: number;
+  returnedTasks: number;
+}
+
 export interface LoginResponse {
   user: User;
   accessToken: string;
   refreshToken: string;
+}
+
+export interface AttendancePause {
+  id: string;
+  attendanceId: string;
+  startedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+}
+
+export interface Attendance {
+  id: string;
+  userId: string;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  pauses: AttendancePause[];
+  totalPausedSeconds: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TaskQuery {

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Loader2, Moon, Sun } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useChangePassword, errorMessage } from '@/lib/hooks';
@@ -35,6 +36,7 @@ function ThemeOption({ value, label, icon: Icon }: { value: string; label: strin
 }
 
 export default function ProfilePage() {
+  const t = useTranslations('Profile');
   const user = useAuthStore((s) => s.user);
   const changePassword = useChangePassword();
 
@@ -47,7 +49,7 @@ export default function ProfilePage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Profile & Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
 
       <Card>
         <CardContent className="flex items-center gap-4 p-6">
@@ -56,7 +58,7 @@ export default function ProfilePage() {
             <p className="text-lg font-semibold">{user?.name}</p>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {user?.role === 'ADMIN' ? 'Administrator' : [user?.department, user?.position].filter(Boolean).join(' · ') || 'Employee'}
+              {user?.role === 'ADMIN' ? t('admin') : [user?.department, user?.position].filter(Boolean).join(' · ') || t('employee')}
             </p>
           </div>
         </CardContent>
@@ -64,20 +66,20 @@ export default function ProfilePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Appearance</CardTitle>
-          <CardDescription>Choose light, dark, or follow your system.</CardDescription>
+          <CardTitle className="text-base">{t('appearance')}</CardTitle>
+          <CardDescription>{t('appearanceDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="flex gap-3">
-          <ThemeOption value="light" label="Light" icon={Sun} />
-          <ThemeOption value="dark" label="Dark" icon={Moon} />
-          <ThemeOption value="system" label="System" icon={Sun} />
+          <ThemeOption value="light" label={t('light')} icon={Sun} />
+          <ThemeOption value="dark" label={t('dark')} icon={Moon} />
+          <ThemeOption value="system" label={t('system')} icon={Sun} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Change password</CardTitle>
-          <CardDescription>Changing your password signs out all other sessions.</CardDescription>
+          <CardTitle className="text-base">{t('changePassword')}</CardTitle>
+          <CardDescription>{t('changePasswordDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -89,15 +91,15 @@ export default function ProfilePage() {
                   currentPassword: v.currentPassword,
                   newPassword: v.newPassword,
                 });
-                toast.success('Password changed');
+                toast.success(t('passwordChanged'));
                 reset();
               } catch (err) {
-                toast.error(errorMessage(err, 'Failed to change password'));
+                toast.error(errorMessage(err, t('failedChangePassword')));
               }
             })}
           >
             <div className="space-y-1.5">
-              <Label>Current password</Label>
+              <Label>{t('currentPassword')}</Label>
               <Input type="password" {...register('currentPassword')} />
               {errors.currentPassword && (
                 <p className="text-xs text-destructive">{errors.currentPassword.message}</p>
@@ -105,14 +107,14 @@ export default function ProfilePage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>New password</Label>
+                <Label>{t('newPassword')}</Label>
                 <Input type="password" {...register('newPassword')} />
                 {errors.newPassword && (
                   <p className="text-xs text-destructive">{errors.newPassword.message}</p>
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Confirm new password</Label>
+                <Label>{t('confirmPassword')}</Label>
                 <Input type="password" {...register('confirmPassword')} />
                 {errors.confirmPassword && (
                   <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
@@ -121,7 +123,7 @@ export default function ProfilePage() {
             </div>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Change password
+              {t('changePassword')}
             </Button>
           </form>
         </CardContent>

@@ -20,10 +20,10 @@
   --ring: oklch(0.55 0.22 275);
   --radius: 0.875rem;
 
-  /* Brand gradient: indigo → violet → fuchsia */
-  --grad-from: oklch(0.58 0.22 275);
-  --grad-via: oklch(0.55 0.24 295);
-  --grad-to: oklch(0.6 0.26 325);
+  /* Brand gradient: dark navy blues */
+  --grad-from: oklch(0.2 0.05 260);
+  --grad-via: oklch(0.3 0.08 260);
+  --grad-to: oklch(0.4 0.1 260);
 
   --aurora-opacity: 0.5;
   --grid-line: rgb(15 23 42 / 0.045);
@@ -46,9 +46,9 @@
   --destructive-foreground: oklch(0.98 0.005 260);
   --ring: oklch(0.68 0.2 280);
 
-  --grad-from: oklch(0.62 0.21 275);
-  --grad-via: oklch(0.58 0.24 298);
-  --grad-to: oklch(0.64 0.25 328);
+  --grad-from: oklch(0.25 0.06 260);
+  --grad-via: oklch(0.35 0.09 260);
+  --grad-to: oklch(0.45 0.11 260);
 
   --aurora-opacity: 0.35;
   --grid-line: rgb(255 255 255 / 0.035);

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useTranslations } from 'next-intl';
 import { Bell, CheckCheck } from 'lucide-react';
 import {
   useNotifications,
@@ -19,6 +20,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { toast } from 'sonner';
 
 export default function NotificationsPage() {
+  const t = useTranslations('Notifications');
   const [page, setPage] = useState(1);
   const notifications = useNotifications(page, 20);
   const markRead = useMarkNotificationRead();
@@ -30,9 +32,9 @@ export default function NotificationsPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
           <p className="text-sm text-muted-foreground">
-            {data?.unread ? `${data.unread} unread` : 'You are all caught up'}
+            {data?.unread ? t('unreadCount', { count: data.unread }) : t('allCaughtUp')}
           </p>
         </div>
         {(data?.unread ?? 0) > 0 && (
@@ -43,13 +45,13 @@ export default function NotificationsPage() {
             onClick={async () => {
               try {
                 await markAll.mutateAsync();
-                toast.success('All marked as read');
+                toast.success(t('markedAllRead'));
               } catch (err) {
                 toast.error(errorMessage(err));
               }
             }}
           >
-            <CheckCheck className="h-4 w-4" /> Mark all read
+            <CheckCheck className="h-4 w-4" /> {t('markAllRead')}
           </Button>
         )}
       </div>
@@ -63,8 +65,8 @@ export default function NotificationsPage() {
       ) : (data?.data.length ?? 0) === 0 ? (
         <Card>
           <EmptyState
-            title="No notifications"
-            description="Task updates, assignments and reminders will show up here in real time."
+            title={t('emptyTitle')}
+            description={t('emptyDescription')}
             icon={<Bell className="h-6 w-6" />}
             className="py-16"
           />
@@ -103,7 +105,7 @@ export default function NotificationsPage() {
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   {n.taskId && (
                     <Link href={`/tasks/${n.taskId}`} className="text-xs font-medium text-primary hover:underline">
-                      View task
+                      {t('viewTask')}
                     </Link>
                   )}
                   {!n.readAt && (
@@ -111,7 +113,7 @@ export default function NotificationsPage() {
                       className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                       onClick={() => markRead.mutate(n.id)}
                     >
-                      Mark read
+                      {t('markRead')}
                     </button>
                   )}
                 </div>

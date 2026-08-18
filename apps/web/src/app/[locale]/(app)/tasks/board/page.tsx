@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   DndContext,
   DragOverlay,
@@ -15,31 +16,41 @@ import {
 import { useDraggable } from '@dnd-kit/core';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTasks, useTaskAction, errorMessage, type TaskAction } from '@/lib/hooks';
 import { TASK_STATUSES, type Task, type TaskStatus } from '@/lib/types';
-import { StatusBadge, PriorityBadge, statusLabels, statusAccent } from '@/components/shared/badges';
+import { StatusBadge, PriorityBadge, statusAccent } from '@/components/shared/badges';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 import { formatDate, cn } from '@/lib/utils';
 
 // Drag actions allowed by the backend state machine.
 function actionForDrop(
   from: TaskStatus,
   to: TaskStatus,
-  isAdmin: boolean,
+  isModeratorOrAdmin: boolean,
 ): TaskAction | null {
   if (from === to) return null;
-  if (!isAdmin) {
+
+  if (to === 'PUBLISHED') {
+    if (isModeratorOrAdmin && (from === 'COMPLETED' || from === 'TESTING')) return 'approve';
+    return null;
+  }
+
+  if (!isModeratorOrAdmin) {
     if (from === 'TODO' && to === 'IN_PROGRESS') return 'start';
     if (from === 'RETURNED' && to === 'IN_PROGRESS') return 'start';
     if (from === 'IN_PROGRESS' && to === 'TESTING') return 'submit-testing';
     return null;
   }
+
   if (from === 'TESTING' && to === 'COMPLETED') return 'approve';
   if (from === 'TESTING' && to === 'RETURNED') return 'return';
+  if (from === 'COMPLETED' && to === 'RETURNED') return 'return';
   if (from === 'TODO' && to === 'IN_PROGRESS') return 'start';
   if (from === 'RETURNED' && to === 'IN_PROGRESS') return 'start';
   if (from === 'IN_PROGRESS' && to === 'TESTING') return 'submit-testing';
@@ -87,28 +98,34 @@ function DraggableCard({ task }: { task: Task }) {
 }
 
 function BoardColumn({ status, tasks, index }: { status: TaskStatus; tasks: Task[]; index: number }) {
+  const t = useTranslations('Board');
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const [displayCount, setDisplayCount] = useState(15);
+
+  const visibleTasks = tasks.slice(0, displayCount);
+  const hasMore = tasks.length > displayCount;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06, duration: 0.35 }}
+      transition={{ delay: index * 0.05, duration: 0.3 }}
       ref={setNodeRef}
       className={cn(
-        'glass flex w-68 shrink-0 flex-col gap-2.5 rounded-2xl p-3 transition-all duration-200',
-        isOver && 'shadow-glow scale-[1.02]',
+        'glass flex w-72 max-h-[calc(100vh-14rem)] shrink-0 flex-col gap-2.5 rounded-2xl p-3.5 transition-all duration-200',
+        isOver && 'shadow-glow scale-[1.01] border-primary/40',
       )}
     >
       {/* status accent bar */}
-      <div className={cn('h-1 w-10 rounded-full bg-gradient-to-r', statusAccent[status])} />
-      <div className="flex items-center justify-between px-0.5">
+      <div className={cn('shrink-0 h-1 w-12 rounded-full bg-gradient-to-r', statusAccent[status])} />
+      <div className="shrink-0 flex items-center justify-between px-0.5">
         <StatusBadge status={status} />
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground tabular-nums">
           {tasks.length}
         </span>
       </div>
-      <div className="flex min-h-28 flex-col gap-2.5">
-        {tasks.map((t) => (
+      <div className="flex flex-1 min-h-32 flex-col gap-2.5 overflow-y-auto pr-1 pb-1">
+        {visibleTasks.map((t) => (
           <DraggableCard key={t.id} task={t} />
         ))}
         {tasks.length === 0 && (
@@ -118,8 +135,18 @@ function BoardColumn({ status, tasks, index }: { status: TaskStatus; tasks: Task
               isOver && 'border-primary/50 text-primary',
             )}
           >
-            Drop here
+            {t('dropHere')}
           </div>
+        )}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setDisplayCount((prev) => prev + 15)}
+            className="flex items-center justify-center gap-1 rounded-xl border bg-muted/40 py-2 text-xs font-semibold text-primary transition-colors hover:bg-muted cursor-pointer mt-1"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Load More ({tasks.length - displayCount} remaining)
+          </button>
         )}
       </div>
     </motion.div>
@@ -127,9 +154,15 @@ function BoardColumn({ status, tasks, index }: { status: TaskStatus; tasks: Task
 }
 
 export default function BoardPage() {
+  const t = useTranslations('Board');
+  const tb = useTranslations('Badges');
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
-  const tasksQuery = useTasks({ limit: 100, sortBy: 'createdAt', sortOrder: 'desc' }, !isAdmin);
+  const isModerator = user?.role === 'MODERATOR';
+  const isModeratorOrAdmin = isAdmin || isModerator;
+
+  const [limit, setLimit] = useState(100);
+  const tasksQuery = useTasks({ limit, sortBy: 'createdAt', sortOrder: 'desc' }, !isModeratorOrAdmin);
   const taskAction = useTaskAction();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
@@ -137,7 +170,10 @@ export default function BoardPage() {
 
   const byStatus = useMemo(() => {
     const map = new Map<TaskStatus, Task[]>(TASK_STATUSES.map((s) => [s, []]));
-    (tasksQuery.data?.data ?? []).forEach((t) => map.get(t.status)?.push(t));
+    (tasksQuery.data?.data ?? []).forEach((t) => {
+      const list = map.get(t.status);
+      if (list) list.push(t);
+    });
     return map;
   }, [tasksQuery.data]);
 
@@ -150,41 +186,71 @@ export default function BoardPage() {
     const task = (e.active.data.current as { task: Task }).task;
     const to = e.over?.id as TaskStatus | undefined;
     if (!to) return;
-    const action = actionForDrop(task.status, to, !!isAdmin);
+
+    if (to === 'PUBLISHED' && !isModeratorOrAdmin) {
+      toast.error('Only Moderators and Admins can publish completed tasks.');
+      return;
+    }
+
+    const action = actionForDrop(task.status, to, isModeratorOrAdmin);
     if (!action) {
       if (task.status !== to) {
-        toast.error(`Cannot move from ${statusLabels[task.status]} to ${statusLabels[to]}`);
+        toast.error(
+          t('cannotMove', {
+            from: tb((task.status === 'IN_PROGRESS' ? 'inProgress' : task.status.toLowerCase()) as string),
+            to: tb((to === 'IN_PROGRESS' ? 'inProgress' : to.toLowerCase()) as string),
+          })
+        );
       }
       return;
     }
     try {
       await taskAction.mutateAsync({ id: task.id, action });
-      toast.success(`Moved to ${statusLabels[to]}`);
+      toast.success(
+        t('movedTo', { status: tb((to === 'IN_PROGRESS' ? 'inProgress' : to.toLowerCase()) as string) })
+      );
     } catch (err) {
-      toast.error(errorMessage(err, 'Transition not allowed'));
+      toast.error(errorMessage(err, t('transitionNotAllowed')));
     }
   };
 
+  const hasGlobalMore = (tasksQuery.data?.total ?? 0) > (tasksQuery.data?.data?.length ?? 0);
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Board</h1>
-        <p className="text-sm text-muted-foreground">
-          {isAdmin
-            ? 'Drag cards to approve or return tasks in testing'
-            : 'Drag cards to start work or submit for testing'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
+          <p className="text-sm text-muted-foreground">
+            {isModeratorOrAdmin ? t('adminSubtitle') : t('employeeSubtitle')}
+          </p>
+        </div>
+
+        {/* Global Load More Button */}
+        {hasGlobalMore && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl gap-2 cursor-pointer"
+            onClick={() => setLimit((prev) => prev + 100)}
+            disabled={tasksQuery.isFetching}
+          >
+            {tasksQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            Load More Tasks ({tasksQuery.data!.total - tasksQuery.data!.data.length})
+          </Button>
+        )}
       </div>
+
       {tasksQuery.isLoading ? (
         <div className="flex gap-3.5 overflow-x-auto pb-4">
           {TASK_STATUSES.map((s) => (
-            <Skeleton key={s} className="h-80 w-68 shrink-0 rounded-2xl" />
+            <Skeleton key={s} className="h-80 w-72 shrink-0 rounded-2xl" />
           ))}
         </div>
       ) : (tasksQuery.data?.total ?? 0) === 0 ? (
         <EmptyState
-          title="No tasks on the board"
-          description={isAdmin ? 'Create a task to get started.' : 'Nothing assigned to you yet.'}
+          title={t('emptyTitle')}
+          description={isModeratorOrAdmin ? t('emptyAdminDescription') : t('emptyEmployeeDescription')}
           className="py-24"
         />
       ) : (

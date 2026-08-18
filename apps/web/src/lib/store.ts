@@ -22,6 +22,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       // /auth/me returns AuthUser { id, email, role, name } — keep stored profile when richer.
       set((s) => ({ user: { ...s.user, ...res.data } as User, hydrated: true }));
     } catch {
+      tokenStore.set(null);
+      setRoleCookie(null);
       set({ user: null, hydrated: true });
     }
   },

@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { Priority, TaskStatus } from '@/lib/types';
+import { useTranslations } from 'next-intl';
 
 const statusStyles: Record<TaskStatus, { pill: string; dot: string }> = {
   TODO: { pill: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20', dot: 'bg-slate-400' },
@@ -7,14 +8,16 @@ const statusStyles: Record<TaskStatus, { pill: string; dot: string }> = {
   TESTING: { pill: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25', dot: 'bg-amber-500 animate-pulse-dot' },
   COMPLETED: { pill: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25', dot: 'bg-emerald-500' },
   RETURNED: { pill: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25', dot: 'bg-rose-500' },
+  PUBLISHED: { pill: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25', dot: 'bg-purple-500' },
 };
 
-const statusLabels: Record<TaskStatus, string> = {
-  TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
-  TESTING: 'Testing',
-  COMPLETED: 'Completed',
-  RETURNED: 'Returned',
+const statusLabelKeys: Record<TaskStatus, string> = {
+  TODO: 'todo',
+  IN_PROGRESS: 'inProgress',
+  TESTING: 'testing',
+  COMPLETED: 'completed',
+  RETURNED: 'returned',
+  PUBLISHED: 'published',
 };
 
 const priorityStyles: Record<Priority, { pill: string; dot: string }> = {
@@ -31,6 +34,7 @@ export const statusAccent: Record<TaskStatus, string> = {
   TESTING: 'from-amber-400 to-orange-500',
   COMPLETED: 'from-emerald-400 to-teal-500',
   RETURNED: 'from-rose-400 to-red-500',
+  PUBLISHED: 'from-purple-400 to-violet-600',
 };
 
 function Pill({
@@ -56,14 +60,22 @@ function Pill({
 }
 
 export function StatusBadge({ status, className }: { status: TaskStatus; className?: string }) {
+  const t = useTranslations('Badges');
   const s = statusStyles[status];
-  return <Pill label={statusLabels[status]} dot={s.dot} className={cn(s.pill, className)} />;
+  return <Pill label={t(statusLabelKeys[status] as string)} dot={s.dot} className={cn(s.pill, className)} />;
 }
+
+const priorityLabelKeys: Record<Priority, string> = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  URGENT: 'urgent',
+};
 
 export function PriorityBadge({ priority, className }: { priority: Priority; className?: string }) {
+  const t = useTranslations('Badges');
   const p = priorityStyles[priority];
-  const label = priority.charAt(0) + priority.slice(1).toLowerCase();
-  return <Pill label={label} dot={p.dot} className={cn(p.pill, className)} />;
+  return <Pill label={t(priorityLabelKeys[priority] as string)} dot={p.dot} className={cn(p.pill, className)} />;
 }
 
-export { statusLabels };
+export { statusLabelKeys as statusLabels };

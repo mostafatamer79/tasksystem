@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Plus, Search, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
@@ -9,7 +10,7 @@ import { useTasks, useDeleteTask, useEmployees, errorMessage } from '@/lib/hooks
 import { PRIORITIES, TASK_STATUSES, type Priority, type Task, type TaskStatus } from '@/lib/types';
 import { formatDate, remainingDays, cn } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/shared/data-table';
-import { StatusBadge, PriorityBadge, statusLabels } from '@/components/shared/badges';
+import { StatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Pagination } from '@/components/shared/pagination';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
@@ -20,6 +21,9 @@ import { TaskFormDialog } from '@/components/tasks/task-form-dialog';
 import { motion } from 'framer-motion';
 
 export default function TasksPage() {
+  const t = useTranslations('Tasks');
+  const tb = useTranslations('Badges');
+  const tCommon = useTranslations('Common');
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
@@ -62,7 +66,7 @@ export default function TasksPage() {
   const columns: Column<Task>[] = [
     {
       key: 'title',
-      header: 'Title',
+      header: t('titleColumn'),
       sortable: true,
       sortKey: 'title',
       cell: (t) => (
@@ -72,13 +76,13 @@ export default function TasksPage() {
         </div>
       ),
     },
-    { key: 'status', header: 'Status', cell: (t) => <StatusBadge status={t.status} /> },
-    { key: 'priority', header: 'Priority', cell: (t) => <PriorityBadge priority={t.priority} /> },
+    { key: 'status', header: t('statusColumn'), cell: (t) => <StatusBadge status={t.status} /> },
+    { key: 'priority', header: t('priorityColumn'), cell: (t) => <PriorityBadge priority={t.priority} /> },
     ...(isAdmin
       ? [
           {
             key: 'assignee',
-            header: 'Assignee',
+            header: t('assigneeColumn'),
             cell: (t: Task) =>
               t.assignedTo ? (
                 <div className="flex items-center gap-2">
@@ -93,17 +97,21 @@ export default function TasksPage() {
       : []),
     {
       key: 'dueDate',
-      header: 'Due',
+      header: t('dueColumn'),
       sortable: true,
       sortKey: 'dueDate',
-      cell: (t) => {
-        const days = remainingDays(t.dueDate);
+      cell: (task) => {
+        const days = remainingDays(task.dueDate);
         return (
           <div className="whitespace-nowrap">
-            <p>{formatDate(t.dueDate)}</p>
-            {days !== null && t.status !== 'COMPLETED' && (
+            <p>{formatDate(task.dueDate)}</p>
+            {days !== null && task.status !== 'COMPLETED' && (
               <p className={cn('text-xs', days < 0 ? 'text-destructive' : days <= 1 ? 'text-amber-500' : 'text-muted-foreground')}>
-                {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `${days}d left`}
+                {days < 0
+                  ? t('daysOverdue', { days: Math.abs(days) })
+                  : days === 0
+                    ? t('dueToday')
+                    : t('daysLeft', { days })}
               </p>
             )}
           </div>
@@ -112,7 +120,7 @@ export default function TasksPage() {
     },
     {
       key: 'progress',
-      header: 'Progress',
+      header: t('progressColumn'),
       cell: (t) => (
         <div className="flex w-28 items-center gap-2">
           <Progress value={t.progress} className="h-1.5" />
@@ -132,6 +140,7 @@ export default function TasksPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
+                  title={tCommon('edit')}
                   onClick={() => {
                     setEditTask(t);
                     setFormOpen(true);
@@ -143,6 +152,7 @@ export default function TasksPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 hover:text-destructive"
+                  title={tCommon('delete')}
                   onClick={() => setDeleteTarget(t)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -158,9 +168,9 @@ export default function TasksPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{isAdmin ? 'Tasks' : 'My Tasks'}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{isAdmin ? t('title') : t('myTasks')}</h1>
           <p className="text-sm text-muted-foreground">
-            {isAdmin ? 'All team tasks' : 'Tasks assigned to you'}
+            {isAdmin ? t('subtitle') : t('myTasksSubtitle')}
           </p>
         </div>
         {isAdmin && (
@@ -170,7 +180,7 @@ export default function TasksPage() {
               setFormOpen(true);
             }}
           >
-            <Plus className="h-4 w-4" /> New task
+            <Plus className="h-4 w-4" /> {t('newTask')}
           </Button>
         )}
       </div>
@@ -180,7 +190,7 @@ export default function TasksPage() {
         <div className="relative min-w-52 flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search tasks…"
+            placeholder={t('searchPlaceholder')}
             className="pl-9"
             value={search}
             onChange={(e) => {
@@ -197,10 +207,10 @@ export default function TasksPage() {
             setPage(1);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">{t('allStatuses')}</option>
           {TASK_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {statusLabels[s]}
+              {tb((s === 'IN_PROGRESS' ? 'inProgress' : s.toLowerCase()) as string)}
             </option>
           ))}
         </Select>
@@ -212,10 +222,10 @@ export default function TasksPage() {
             setPage(1);
           }}
         >
-          <option value="">All priorities</option>
+          <option value="">{t('allPriorities')}</option>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
-              {p.charAt(0) + p.slice(1).toLowerCase()}
+              {tb(p.toLowerCase() as string)}
             </option>
           ))}
         </Select>
@@ -228,7 +238,7 @@ export default function TasksPage() {
               setPage(1);
             }}
           >
-            <option value="">All assignees</option>
+            <option value="">{t('allAssignees')}</option>
             {(employees.data?.data ?? []).map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
@@ -243,8 +253,8 @@ export default function TasksPage() {
         data={tasks.data?.data ?? []}
         rowKey={(t) => t.id}
         loading={tasks.isLoading}
-        emptyTitle="No tasks found"
-        emptyDescription="Try adjusting your filters, or create a new task."
+        emptyTitle={t('emptyTitle')}
+        emptyDescription={t('emptyDescription')}
         onRowClick={(t) => router.push(`/tasks/${t.id}`)}
         sortBy={sortBy}
         sortOrder={sortOrder}
@@ -263,16 +273,16 @@ export default function TasksPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete task?"
-        description={`"${deleteTarget?.title}" will be permanently deleted with its history and comments.`}
-        confirmLabel="Delete"
+        title={t('deleteTitle')}
+        description={t('deleteDescription', { title: deleteTarget?.title ?? '' })}
+        confirmLabel={t('deleteConfirm')}
         destructive
         loading={deleteTask.isPending}
         onConfirm={async () => {
           if (!deleteTarget) return;
           try {
             await deleteTask.mutateAsync(deleteTarget.id);
-            toast.success('Task deleted');
+            toast.success(t('deleteConfirm'));
             setDeleteTarget(null);
           } catch (err) {
             toast.error(errorMessage(err, 'Failed to delete task'));

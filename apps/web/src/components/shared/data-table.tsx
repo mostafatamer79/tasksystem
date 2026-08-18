@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from './empty-state';
@@ -33,13 +34,14 @@ export function DataTable<T>({
   data,
   rowKey,
   loading,
-  emptyTitle = 'Nothing here yet',
+  emptyTitle,
   emptyDescription,
   onRowClick,
   sortBy,
   sortOrder,
   onSort,
 }: DataTableProps<T>) {
+  const t = useTranslations('Common');
   return (
     <div className="glass overflow-x-auto rounded-2xl shadow-soft">
       <table className="w-full text-sm">
@@ -108,7 +110,7 @@ export function DataTable<T>({
         </tbody>
       </table>
       {!loading && data.length === 0 && (
-        <EmptyState title={emptyTitle} description={emptyDescription} className="py-14" />
+        <EmptyState title={emptyTitle ?? t('nothingHere')} description={emptyDescription} className="py-14" />
       )}
     </div>
   );

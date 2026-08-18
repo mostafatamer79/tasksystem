@@ -52,7 +52,7 @@ export function Dialog({ open, onOpenChange, title, description, children, class
           >
             <button
               onClick={() => onOpenChange(false)}
-              className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground hover:bg-muted cursor-pointer"
+              className="absolute right-4 top-4 rtl:right-auto rtl:left-4 z-30 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
               aria-label="Close"
             >
               <X className="h-4 w-4" />

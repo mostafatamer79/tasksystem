@@ -1,8 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
+import { Link, usePathname, useRouter } from '@/i18n/routing';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -18,7 +19,11 @@ import {
   Menu,
   X,
   Search,
+  Languages,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useNotificationsSocket } from '@/lib/socket';
 import { useNotifications } from '@/lib/hooks';
@@ -27,35 +32,38 @@ import { Avatar } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/tasks', label: 'Tasks', icon: ListTodo },
-  { href: '/tasks/board', label: 'Board', icon: KanbanSquare },
-  { href: '/users', label: 'Users', icon: Users, adminOnly: true },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/profile', label: 'Profile', icon: UserRound },
+import { BookOpen } from 'lucide-react';
+
+type NavKey = 'dashboard' | 'tasks' | 'board' | 'users' | 'plans' | 'notifications' | 'profile';
+
+const navItems: { href: string; labelKey: NavKey; icon: LucideIcon; adminOnly?: boolean }[] = [
+  { href: '/dashboard', labelKey: 'dashboard', icon: LayoutDashboard },
+  { href: '/tasks', labelKey: 'tasks', icon: ListTodo },
+  { href: '/tasks/board', labelKey: 'board', icon: KanbanSquare },
+  { href: '/users', labelKey: 'users', icon: Users, adminOnly: true },
+  { href: '/plans', labelKey: 'plans', icon: BookOpen },
+  { href: '/notifications', labelKey: 'notifications', icon: Bell },
+  { href: '/profile', labelKey: 'profile', icon: UserRound },
 ];
 
-function Logo({ className }: { className?: string }) {
+function Logo({ className, collapsed = false }: { className?: string; collapsed?: boolean }) {
   return (
-    <Link href="/dashboard" className={cn('group flex items-center gap-2.5 px-2', className)}>
-      <div className="relative">
-        <div className="absolute inset-0 rounded-xl bg-brand-gradient opacity-50 blur-md transition-opacity group-hover:opacity-80" />
-        <div className="relative rounded-xl bg-brand-gradient p-1.5 text-white shadow-md">
-          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-        </div>
-      </div>
-      <span className="text-lg font-bold tracking-tight">
-        Task<span className="text-brand-gradient">Flow</span>
-      </span>
+    <Link
+      href="/dashboard"
+      className={cn('group flex items-center gap-2.5 px-2', collapsed && 'justify-center px-0', className)}
+    >
+      <img src="/logo.png" alt="Aurora Logo" className="h-8 w-auto shrink-0 object-contain rounded-md" />
+      {!collapsed && (
+        <span className="text-lg font-bold tracking-tight">
+          Aurora<span className="text-brand-gradient">Team</span>
+        </span>
+      )}
     </Link>
   );
 }
 
 function ThemeToggle() {
+  const t = useTranslations('Nav');
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -63,20 +71,53 @@ function ThemeToggle() {
     <button
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
       className="rounded-xl p-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90 cursor-pointer"
-      aria-label="Toggle theme"
+      aria-label={t('toggleTheme')}
+      title={t('toggleTheme')}
     >
       {mounted && resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
   );
 }
 
+function LanguageSwitcher() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const locale = useParams().locale as string;
+  const nextLocale = locale === 'ar' ? 'en' : 'ar';
+  const label = locale === 'ar' ? 'English' : 'العربية';
+  return (
+    <button
+      onClick={() => router.replace(pathname, { locale: nextLocale })}
+      className="rounded-xl p-2 text-sm font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90 cursor-pointer"
+      title={label}
+      aria-label={label}
+    >
+      <Languages className="h-4 w-4" />
+    </button>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('Nav');
   const pathname = usePathname();
   const router = useRouter();
   const { user, hydrated, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const { data: notifData } = useNotifications(1, 1);
   useNotificationsSocket();
+
+  // Restore sidebar collapse preference (desktop only)
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('sidebarOpen') : null;
+    if (saved !== null) setSidebarOpen(saved === 'true');
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('sidebarOpen', String(sidebarOpen));
+    }
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (hydrated && !user) router.replace('/login');
@@ -85,13 +126,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!hydrated || !user) {
     return (
       <div className="flex min-h-screen">
-        <div className="hidden w-64 border-r p-4 md:block">
-          <Skeleton className="mb-6 h-10 w-36" />
+        <div className={cn('hidden border-r p-4 md:block', sidebarOpen ? 'w-64' : 'w-20')}>
+          <Skeleton className={cn('mb-6 h-10', sidebarOpen ? 'w-36' : 'w-10')} />
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="mb-3 h-10 w-full rounded-xl" />
           ))}
         </div>
-        <div className="flex-1 p-8">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Skeleton className="mb-4 h-9 w-56" />
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -105,7 +146,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdmin = user.role === 'ADMIN';
   const unread = notifData?.unread ?? 0;
-  const visibleNav = navItems.filter((i) => !i.adminOnly || isAdmin);
+  
+  const visibleNav = navItems.filter((i) => {
+    if (i.adminOnly && !isAdmin) return false;
+    return true;
+  });
 
   const isActive = (href: string) =>
     href === '/tasks' ? pathname === '/tasks' : pathname === href || pathname.startsWith(href + '/');
@@ -119,8 +164,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             key={item.href}
             href={item.href}
             onClick={() => setMobileOpen(false)}
+            title={!sidebarOpen ? t(item.labelKey) : undefined}
             className={cn(
               'relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors',
+              sidebarOpen ? '' : 'justify-center px-0',
               active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -132,11 +179,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               />
             )}
             <item.icon className={cn('relative z-10 h-4 w-4', active && 'text-primary')} />
-            <span className="relative z-10">{item.label}</span>
-            {item.href === '/notifications' && unread > 0 && (
-              <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-gradient px-1.5 text-[10px] font-bold text-white shadow-md">
+            {sidebarOpen && <span className="relative z-10">{t(item.labelKey)}</span>}
+            {sidebarOpen && item.href === '/notifications' && unread > 0 && (
+              <span className="relative z-10 ms-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-gradient px-1.5 text-[10px] font-bold text-white shadow-md">
                 {unread > 99 ? '99+' : unread}
               </span>
+            )}
+            {!sidebarOpen && item.href === '/notifications' && unread > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-primary" />
             )}
           </Link>
         );
@@ -149,27 +199,54 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="app-bg" />
 
       {/* Sidebar (desktop) */}
-      <aside className="sticky top-0 hidden h-screen w-64 flex-col border-r border-border/60 bg-card/40 p-4 backdrop-blur-xl md:flex">
-        <Logo className="mb-7 mt-1" />
+      <aside
+        className={cn(
+          'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border/60 bg-card/40 backdrop-blur-xl transition-[width] duration-300 ease-out md:flex',
+          sidebarOpen ? 'w-64 p-4' : 'w-20 py-4 px-3'
+        )}
+      >
+        <div className={cn('flex items-center', sidebarOpen ? 'justify-between' : 'justify-center')}>
+          <Logo className={cn('mb-7 mt-1', !sidebarOpen && 'mb-6 mt-0')} collapsed={!sidebarOpen} />
+          {sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="mb-7 mt-1 rounded-xl p-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90 cursor-pointer"
+              aria-label={t('collapseSidebar')}
+              title={t('collapseSidebar')}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         {nav}
-        <div className="mt-auto flex items-center gap-2.5 rounded-2xl border bg-card/60 p-3 shadow-soft">
-          <Avatar name={user.name} src={user.avatarUrl} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{user.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {user.role === 'ADMIN' ? 'Administrator' : user.position ?? 'Employee'}
-            </p>
-          </div>
-          <button
-            onClick={async () => {
-              await logout();
-              router.replace('/login');
-            }}
-            className="rounded-xl p-2 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90 cursor-pointer"
-            aria-label="Log out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+        <div
+          className={cn(
+            'mt-auto flex items-center rounded-2xl border bg-card/60 shadow-soft',
+            sidebarOpen ? 'gap-2.5 p-3' : 'flex-col justify-center p-2'
+          )}
+        >
+          <Avatar name={user.name} src={user.avatarUrl} className={cn(!sidebarOpen && 'h-9 w-9')} />
+          {sidebarOpen && (
+            <>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {user.role === 'ADMIN' ? t('administrator') : user.role === 'MODERATOR' ? t('moderator') : user.position ?? t('employee')}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  await logout();
+                  router.replace('/login');
+                }}
+                className="rounded-xl p-2 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive active:scale-90 cursor-pointer"
+                aria-label={t('logout')}
+                title={t('logout')}
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
       </aside>
 
@@ -179,23 +256,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 md:hidden">
             <Logo />
           </div>
+          {/* Desktop sidebar expand toggle */}
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="hidden rounded-xl p-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90 md:block cursor-pointer"
+              aria-label={t('expandSidebar')}
+              title={t('expandSidebar')}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          )}
           {/* Command-palette-style search trigger (visual) */}
           <button
             onClick={() => router.push('/tasks')}
             className="hidden h-9 w-72 items-center gap-2.5 rounded-xl border bg-muted/50 px-3 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted md:flex cursor-pointer"
           >
             <Search className="h-3.5 w-3.5" />
-            <span>Search tasks…</span>
-            <kbd className="ml-auto rounded-md border bg-background px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+            <span>{t('searchTasks')}</span>
+            <kbd className="ms-auto rounded-md border bg-background px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
               /
             </kbd>
           </button>
           <div className="flex items-center gap-1.5">
+            <LanguageSwitcher />
             <ThemeToggle />
             <Link
               href="/notifications"
               className="relative rounded-xl p-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90"
-              aria-label="Notifications"
+              aria-label={t('notifications')}
+              title={t('notifications')}
             >
               <Bell className="h-4 w-4" />
               <AnimatePresence>
@@ -219,7 +309,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setMobileOpen((v) => !v)}
               className="rounded-xl p-2 transition-colors hover:bg-muted md:hidden cursor-pointer"
-              aria-label="Menu"
+              aria-label={t('menu')}
+              title={t('menu')}
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>

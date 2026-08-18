@@ -64,7 +64,10 @@ api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
-    const isAuthCall = original?.url?.includes('/auth/login') || original?.url?.includes('/auth/refresh');
+    const isAuthCall =
+      original?.url?.includes('/auth/login') ||
+      original?.url?.includes('/auth/refresh') ||
+      original?.url?.includes('/auth/me'); // don't retry /auth/me — it's the hydration probe
     if (error.response?.status === 401 && original && !original._retried && !isAuthCall) {
       original._retried = true;
       const token = await refreshAccessToken();
@@ -72,7 +75,7 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);
       }
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
     }

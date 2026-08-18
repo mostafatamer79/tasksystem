@@ -1,7 +1,9 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
+import { getDynamicGreeting } from '@/lib/greetings';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
@@ -24,11 +26,20 @@ const item = {
 };
 
 function LoginForm() {
+  const t = useTranslations('Auth');
   const router = useRouter();
   const searchParams = useSearchParams();
   const setUser = useAuthStore((s) => s.setUser);
+  const { user, hydrated } = useAuthStore();
   const [serverError, setServerError] = useState<string | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    if (hydrated && user) {
+      router.replace(searchParams.get('next') || '/dashboard');
+    }
+  }, [hydrated, user, router, searchParams]);
 
   const {
     register,
@@ -36,6 +47,7 @@ function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
 
+  const locale = useLocale();
   const onSubmit = async (values: LoginInput) => {
     setServerError(null);
     try {
@@ -43,10 +55,11 @@ function LoginForm() {
       tokenStore.set(res.data.accessToken);
       setRoleCookie(res.data.user.role);
       setUser(res.data.user);
-      toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}`);
+      const greeting = getDynamicGreeting(locale, res.data.user.name);
+      toast.success(greeting.loginToast);
       router.replace(searchParams.get('next') || '/dashboard');
     } catch (err) {
-      setServerError(errorMessage(err, 'Invalid credentials'));
+      setServerError(errorMessage(err, t('invalidCredentials')));
       setShakeKey((k) => k + 1);
     }
   };
@@ -54,19 +67,11 @@ function LoginForm() {
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="w-full max-w-md">
       <motion.div variants={item} className="mb-8 flex flex-col items-center gap-3 text-center">
-        <div className="relative">
-          <div className="absolute inset-0 rounded-2xl bg-brand-gradient opacity-60 blur-xl" />
-          <div className="relative rounded-2xl bg-brand-gradient p-3.5 text-white shadow-lift">
-            <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-          </div>
-        </div>
+        <img src="/logo.png" alt="Aurora Logo" className="h-20 w-auto object-contain mb-2 rounded-2xl" />
         <h1 className="text-3xl font-bold tracking-tight">
-          Task<span className="text-brand-gradient">Flow</span>
+          Aurora<span className="text-brand-gradient">Team</span>
         </h1>
-        <p className="text-sm text-muted-foreground">Sign in to your workspace</p>
+        <p className="text-sm text-muted-foreground">{t('signInSubtitle')}</p>
       </motion.div>
 
       <motion.div variants={item} key={shakeKey} className={shakeKey ? 'animate-shake' : ''}>
@@ -82,28 +87,28 @@ function LoginForm() {
               </motion.p>
             )}
             <motion.div variants={item} className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('email')}</Label>
               <div className="group relative">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <Mail className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="you@example.com"
-                  className="h-11 rounded-xl pl-9"
+                  className="h-11 rounded-xl ps-9"
                   {...register('email')}
                 />
               </div>
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
             </motion.div>
             <motion.div variants={item} className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('password')}</Label>
               <div className="group relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <Lock className="absolute start-3 top-3 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
-                  className="h-11 rounded-xl pl-9"
+                  className="h-11 rounded-xl ps-9"
                   {...register('password')}
                 />
               </div>
@@ -115,8 +120,8 @@ function LoginForm() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    Sign in
-                    <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                    {t('signIn')}
+                    <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 rtl:-scale-x-100 rtl:group-hover:-translate-x-1" />
                   </>
                 )}
               </Button>

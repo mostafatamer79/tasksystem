@@ -5,8 +5,10 @@ import { api, errorMessage } from './api';
 import type {
   AdminCharts,
   AdminStats,
+  Attendance,
   Comment,
   EmployeeStats,
+  EmployeeTaskStats,
   NotificationsPage,
   Paginated,
   Task,
@@ -15,11 +17,15 @@ import type {
   User,
   UserQuery,
 } from './types';
+
 import type {
   CreateTaskInput,
   CreateUserInput,
   UpdateTaskInput,
   UpdateUserInput,
+  CreatePlanInput,
+  UpdatePlanInput,
+  CreatePlanTaskInput,
 } from './schemas';
 
 // ---------- Auth / dashboard ----------
@@ -44,6 +50,15 @@ export function useEmployeeStats(enabled = true) {
   return useQuery({
     queryKey: ['dashboard', 'employee', 'stats'],
     queryFn: async () => (await api.get<EmployeeStats>('/dashboard/employee/stats')).data,
+    enabled,
+  });
+}
+
+export function useAdminEmployeesStats(date?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['dashboard', 'admin', 'employees-stats', date ?? 'all'],
+    queryFn: async () =>
+      (await api.get<EmployeeTaskStats[]>('/dashboard/admin/employees-stats', { params: date ? { date } : {} })).data,
     enabled,
   });
 }
@@ -119,7 +134,122 @@ export function useDeleteTask() {
   });
 }
 
-export type TaskAction = 'start' | 'submit-testing' | 'approve' | 'return' | 'progress';
+export type TaskAction = 'start' | 'submit-testing' | 'approve' | 'publish' | 'return' | 'progress';
+
+// ---------- Plans ----------
+
+export function usePlans(query: import('./types').PlanQuery) {
+  return useQuery({
+    queryKey: ['plans', query],
+    queryFn: async () =>
+      (await api.get<Paginated<import('./types').Plan>>('/plans', { params: query })).data,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function usePlan(id: string) {
+  return useQuery({
+    queryKey: ['plans', 'detail', id],
+    queryFn: async () => (await api.get<import('./types').Plan>(`/plans/${id}`)).data,
+    enabled: !!id,
+  });
+}
+
+function useInvalidatePlans() {
+  const qc = useQueryClient();
+  return (id?: string) => {
+    qc.invalidateQueries({ queryKey: ['plans'] });
+    if (id) qc.invalidateQueries({ queryKey: ['plans', 'detail', id] });
+  };
+}
+
+export function useCreatePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async (input: CreatePlanInput) =>
+      (await api.post<import('./types').Plan>('/plans', input)).data,
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useUpdatePlan(id: string) {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async (input: UpdatePlanInput) =>
+      (await api.patch<import('./types').Plan>(`/plans/${id}`, input)).data,
+    onSuccess: () => invalidate(id),
+  });
+}
+
+export function useDeletePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/plans/${id}`)).data,
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function usePlanAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, action, note }: { id: string; action: 'submit' | 'publish' | 'return'; note?: string }) =>
+      (await api.post<import('./types').Plan>(`/plans/${id}/${action}`, note ? { note } : {})).data,
+    onSuccess: (data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['plans'] });
+      qc.invalidateQueries({ queryKey: ['plans', 'detail', id] });
+    },
+  });
+}
+
+export function useBulkUpsertPlanTasks(planId: string) {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async (tasks: (CreatePlanTaskInput & { id?: string })[]) =>
+      (await api.put<import('./types').PlanTask[]>(`/plans/${planId}/tasks`, tasks)).data,
+    onSuccess: () => invalidate(planId),
+  });
+}
+
+// ---------- Attendance ----------
+
+export function useAttendanceToday() {
+  return useQuery({
+    queryKey: ['attendance', 'today'],
+    queryFn: async () => (await api.get<Attendance>('/attendance/today')).data,
+  });
+}
+
+export function useCheckIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<Attendance>('/attendance/check-in', {})).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+  });
+}
+
+export function useCheckOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<Attendance>('/attendance/check-out', {})).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+  });
+}
+
+export function useStartPause() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<Attendance>('/attendance/pause/start', {})).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+  });
+}
+
+export function useEndPause() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<Attendance>('/attendance/pause/end', {})).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+  });
+}
 
 export function useTaskAction() {
   const qc = useQueryClient();
@@ -138,6 +268,7 @@ export function useTaskAction() {
         start: 'IN_PROGRESS',
         'submit-testing': 'TESTING',
         approve: 'COMPLETED',
+        publish: 'PUBLISHED',
         return: 'RETURNED',
         progress: undefined,
       };
@@ -191,12 +322,15 @@ export function useUsers(query: UserQuery, enabled = true) {
 export function useEmployees(enabled = true) {
   return useQuery({
     queryKey: ['users', 'employees'],
-    queryFn: async () =>
-      (
-        await api.get<Paginated<User>>('/users', {
-          params: { role: 'EMPLOYEE', isActive: true, limit: 100 },
-        })
-      ).data,
+    queryFn: async () => {
+      const res = await api.get<Paginated<User>>('/users', {
+        params: { isActive: true, limit: 100 },
+      });
+      return {
+        ...res.data,
+        data: res.data.data.filter((u) => u.role === 'EMPLOYEE' || u.role === 'MODERATOR'),
+      };
+    },
     enabled,
   });
 }
