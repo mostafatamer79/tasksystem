@@ -29,7 +29,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: 'Login — sets httpOnly cookies and returns tokens' })
   @ApiResponse({ status: 200, description: 'Logged in; tokens returned and set as cookies' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
@@ -56,9 +56,15 @@ export class AuthController {
     const token =
       cookies?.['refresh_token'] ??
       (header?.startsWith('Bearer ') ? header.slice(7) : undefined);
-    const tokens = await this.auth.refresh(token, req.ip, req.headers['user-agent']);
-    this.setCookies(res, tokens);
-    return tokens;
+    try {
+      const tokens = await this.auth.refresh(token, req.ip, req.headers['user-agent']);
+      this.setCookies(res, tokens);
+      return tokens;
+    } catch (error) {
+      res.clearCookie('access_token');
+      res.clearCookie('refresh_token');
+      throw error;
+    }
   }
 
   @Post('logout')
@@ -112,6 +118,13 @@ export class AuthController {
     return { message: 'Password changed' };
   }
 
+  @Post('reset-admin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Emergency endpoint to reset admin credentials to defaults' })
+  async resetAdmin() {
+    return this.auth.resetAdminCredentials();
+  }
+
   private setCookies(res: Response, tokens: TokenPair) {
     const secure = this.config.get<string>('COOKIE_SECURE') === 'true';
     const base = { httpOnly: true, secure, sameSite: 'lax' as const, path: '/' };
@@ -133,6 +146,8 @@ export class AuthController {
     department: string | null;
     position: string | null;
     avatarUrl: string | null;
+    workStartTime: string;
+    workEndTime: string;
   }) {
     return {
       id: user.id,
@@ -142,6 +157,8 @@ export class AuthController {
       department: user.department,
       position: user.position,
       avatarUrl: user.avatarUrl,
+      workStartTime: user.workStartTime,
+      workEndTime: user.workEndTime,
     };
   }
 }

@@ -80,6 +80,63 @@ export class DashboardService {
     };
   }
 
+  async adminEmployeesStats(date?: string) {
+    // Resolve optional date window (createdAt range)
+    let dateFilter: { createdAt?: { gte: Date; lt: Date } } = {};
+    if (date) {
+      let base: Date;
+      if (date === 'today') {
+        const n = new Date();
+        base = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+      } else if (date === 'yesterday') {
+        const n = new Date();
+        base = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1);
+      } else {
+        // Expect YYYY-MM-DD
+        const [y, m, d] = date.split('-').map(Number);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          base = new Date(y, m - 1, d);
+        }
+      }
+      if (base!) {
+        dateFilter = { createdAt: { gte: base, lt: new Date(base.getTime() + 86_400_000) } };
+      }
+    }
+
+    const employees = await this.prisma.user.findMany({
+      where: { role: 'EMPLOYEE', isActive: true },
+      select: { id: true, name: true, department: true, position: true, avatarUrl: true },
+      orderBy: { name: 'asc' },
+    });
+
+    if (employees.length === 0) return [];
+
+    const taskGroups = await this.prisma.task.groupBy({
+      by: ['assignedToId', 'status'],
+      where: { assignedToId: { in: employees.map((e) => e.id) }, ...dateFilter },
+      _count: { _all: true },
+    });
+
+    return employees.map((emp) => {
+      const empGroups = taskGroups.filter((g) => g.assignedToId === emp.id);
+      const count = (s: TaskStatus) => empGroups.find((g) => g.status === s)?._count._all ?? 0;
+      const total = empGroups.reduce((acc, g) => acc + g._count._all, 0);
+      return {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        department: emp.department,
+        position: emp.position,
+        avatarUrl: emp.avatarUrl,
+        totalTasks: total,
+        todoTasks: count(TaskStatus.TODO),
+        inProgressTasks: count(TaskStatus.IN_PROGRESS),
+        testingTasks: count(TaskStatus.TESTING),
+        completedTasks: count(TaskStatus.COMPLETED),
+        returnedTasks: count(TaskStatus.RETURNED),
+      };
+    });
+  }
+
   async employeeStats(userId: string) {
     const now = new Date();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);

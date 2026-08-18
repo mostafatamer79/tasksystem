@@ -126,6 +126,29 @@ export class AuthService {
     });
   }
 
+  async resetAdminCredentials() {
+    const admin = await this.prisma.user.findFirst({
+      where: { role: 'ADMIN' },
+    });
+    if (!admin) {
+      throw new BadRequestException('No admin user found');
+    }
+
+    const defaultEmail = 'admin@example.com';
+    const defaultPassword = 'Admin123!';
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: admin.id },
+      data: {
+        email: defaultEmail,
+        passwordHash,
+      },
+    });
+
+    return { message: 'Admin credentials reset to admin@example.com / Admin123!' };
+  }
+
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
   }

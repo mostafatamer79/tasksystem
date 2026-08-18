@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   ADMIN
   EMPLOYEE
+  MODERATOR
 }
 
 enum TaskStatus {
@@ -18,6 +19,7 @@ enum TaskStatus {
   TESTING
   COMPLETED
   RETURNED
+  PUBLISHED
 }
 
 enum Priority {
@@ -42,18 +44,77 @@ model User {
   position      String?
   isActive      Boolean  @default(true)
   avatarUrl     String?
+  workStartTime String   @default("09:00")
+  workEndTime   String   @default("17:00")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  assignedTasks      Task[]         @relation("TaskAssignee")
-  createdTasks       Task[]         @relation("TaskCreator")
-  taskHistory        TaskHistory[]
-  comments           Comment[]
-  notifications      Notification[]
-  auditLogs          AuditLog[]
-  refreshTokens      RefreshToken[]
+  assignedTasks Task[]         @relation("TaskAssignee")
+  createdTasks  Task[]         @relation("TaskCreator")
+  createdPlans  Plan[]         @relation("PlanCreator")
+  reviewedPlans Plan[]         @relation("PlanReviewer")
+  taskHistory   TaskHistory[]
+  comments      Comment[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+  attendances   Attendance[]
 
   @@index([role, isActive])
+}
+
+enum PlanStatus {
+  DRAFT
+  SUBMITTED
+  PUBLISHED
+  RETURNED
+}
+
+model Plan {
+  id           String     @id @default(uuid())
+  title        String
+  teacherName  String
+  description  String?
+  periodStart  DateTime?  @db.Date
+  periodEnd    DateTime?  @db.Date
+  status       PlanStatus @default(DRAFT)
+  returnNote   String?
+  createdById  String
+  createdBy    User       @relation("PlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedById String?
+  reviewedBy   User?      @relation("PlanReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  publishedAt  DateTime?
+  submittedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tasks PlanTask[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model PlanTask {
+  id        String   @id @default(uuid())
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  taskId    String?  @unique
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  date      DateTime @db.Date
+  dayName   String?
+  title     String
+  content   String?
+  material  String?
+  notes     String?
+  isReady   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
+  @@index([taskId])
+  @@index([planId, sortOrder])
 }
 
 model Task {
@@ -78,24 +139,26 @@ model Task {
   history       TaskHistory[]
   comments      Comment[]
   notifications Notification[]
+  planTask      PlanTask?
 
   @@index([status])
   @@index([assignedToId])
+  @@index([createdById])
   @@index([dueDate])
   @@index([createdAt])
   @@index([assignedToId, status])
 }
 
 model TaskHistory {
-  id         String     @id @default(uuid())
+  id         String      @id @default(uuid())
   taskId     String
-  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task       Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
   fromStatus TaskStatus?
   toStatus   TaskStatus
   actorId    String
-  actor      User       @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  actor      User        @relation(fields: [actorId], references: [id], onDelete: Cascade)
   note       String?
-  createdAt  DateTime   @default(now())
+  createdAt  DateTime    @default(now())
 
   @@index([taskId])
 }
@@ -154,4 +217,32 @@ model RefreshToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+model Attendance {
+  id                 String            @id @default(uuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date               DateTime          @db.Date
+  checkIn            DateTime?
+  checkOut           DateTime?
+  pauses             AttendancePause[]
+  totalPausedSeconds Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+model AttendancePause {
+  id           String     @id @default(uuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  startedAt    DateTime
+  endedAt      DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@index([attendanceId])
 }

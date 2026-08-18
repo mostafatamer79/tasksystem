@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { DashboardService } from './dashboard.service';
@@ -29,6 +29,14 @@ export class DashboardController {
   @ApiResponse({ status: 200, description: 'Chart datasets' })
   adminCharts() {
     return this.dashboard.adminCharts();
+  }
+
+  @Get('admin/employees-stats')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Per-employee task stats (ADMIN only)' })
+  @ApiResponse({ status: 200, description: 'Task breakdown per employee' })
+  adminEmployeesStats(@Query('date') date?: string) {
+    return this.dashboard.adminEmployeesStats(date);
   }
 
   @Get('employee/stats')

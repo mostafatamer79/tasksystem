@@ -21,6 +21,8 @@ const publicSelect = {
   position: true,
   isActive: true,
   avatarUrl: true,
+  workStartTime: true,
+  workEndTime: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;

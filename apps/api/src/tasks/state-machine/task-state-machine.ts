@@ -12,14 +12,19 @@ const EMPLOYEE_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> = {
   [TaskStatus.RETURNED]: [TaskStatus.IN_PROGRESS],
 };
 
-const ADMIN_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> = {
-  [TaskStatus.TESTING]: [TaskStatus.COMPLETED, TaskStatus.RETURNED],
+const MODERATOR_OR_ADMIN_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> = {
+  [TaskStatus.TESTING]: [TaskStatus.COMPLETED, TaskStatus.RETURNED, TaskStatus.PUBLISHED],
+  [TaskStatus.COMPLETED]: [TaskStatus.PUBLISHED, TaskStatus.RETURNED],
+  [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS, TaskStatus.TESTING, TaskStatus.COMPLETED, TaskStatus.PUBLISHED],
+  [TaskStatus.IN_PROGRESS]: [TaskStatus.TESTING, TaskStatus.COMPLETED, TaskStatus.PUBLISHED],
+  [TaskStatus.RETURNED]: [TaskStatus.IN_PROGRESS, TaskStatus.TESTING, TaskStatus.COMPLETED, TaskStatus.PUBLISHED],
+  [TaskStatus.PUBLISHED]: [TaskStatus.COMPLETED, TaskStatus.RETURNED],
 };
 
 @Injectable()
 export class TaskStateMachine {
   canTransition(role: Role, from: TaskStatus, to: TaskStatus): boolean {
-    const map = role === Role.ADMIN ? ADMIN_TRANSITIONS : EMPLOYEE_TRANSITIONS;
+    const map = (role === Role.ADMIN || role === Role.MODERATOR) ? MODERATOR_OR_ADMIN_TRANSITIONS : EMPLOYEE_TRANSITIONS;
     return map[from]?.includes(to) ?? false;
   }
 
@@ -28,7 +33,7 @@ export class TaskStateMachine {
       throw new BadRequestException(`Task is already in status ${to}`);
     }
     if (!this.canTransition(role, from, to)) {
-      const roleLabel = role === Role.ADMIN ? 'an admin' : 'an employee';
+      const roleLabel = role === Role.ADMIN ? 'an admin' : role === Role.MODERATOR ? 'a moderator' : 'an employee';
       throw new BadRequestException(
         `Transition ${from} → ${to} is not allowed for ${roleLabel}`,
       );
@@ -37,7 +42,7 @@ export class TaskStateMachine {
 
   /** Employees may only update progress on tasks that are IN_PROGRESS. */
   assertProgressUpdate(role: Role, status: TaskStatus): void {
-    if (role === Role.ADMIN) return;
+    if (role === Role.ADMIN || role === Role.MODERATOR) return;
     if (status !== TaskStatus.IN_PROGRESS) {
       throw new BadRequestException('Progress can only be updated while the task is IN_PROGRESS');
     }

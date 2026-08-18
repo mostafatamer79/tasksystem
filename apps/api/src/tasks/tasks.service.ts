@@ -157,14 +157,21 @@ export class TasksService {
     return this.transition(id, actor, TaskStatus.TESTING, 'TASK_SUBMIT_TESTING', 'Task submitted for testing');
   }
 
-  /** Admin: TESTING→COMPLETED. */
+  /** Admin / Moderator: TESTING→COMPLETED. */
   approve(id: string, actor: AuthUser) {
     return this.transition(id, actor, TaskStatus.COMPLETED, 'TASK_APPROVED', 'Task approved', {
       progress: 100,
     });
   }
 
-  /** Admin: TESTING→RETURNED. */
+  /** Admin / Moderator: COMPLETED→PUBLISHED or TESTING→PUBLISHED. */
+  publish(id: string, actor: AuthUser) {
+    return this.transition(id, actor, TaskStatus.PUBLISHED, 'TASK_PUBLISHED', 'Task published', {
+      progress: 100,
+    });
+  }
+
+  /** Admin / Moderator: TESTING→RETURNED. */
   returnTask(id: string, dto: ReturnTaskDto, actor: AuthUser) {
     return this.transition(id, actor, TaskStatus.RETURNED, 'TASK_RETURNED', 'Task returned', {}, dto.note);
   }
@@ -212,7 +219,7 @@ export class TasksService {
   private async getOwnedOrAdminTask(id: string, actor: AuthUser): Promise<Task> {
     const task = await this.repo.findById(id, actor);
     if (!task) {
-      if (actor.role !== Role.ADMIN) {
+      if (actor.role !== Role.ADMIN && actor.role !== Role.MODERATOR) {
         throw new ForbiddenException('Task not found or not assigned to you');
       }
       throw new NotFoundException('Task not found');

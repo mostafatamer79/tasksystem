@@ -6,6 +6,8 @@ export interface AuthUser {
   email: string;
   role: Role;
   name: string;
+  workStartTime: string;
+  workEndTime: string;
 }
 
 export const CurrentUser = createParamDecorator(

@@ -114,18 +114,28 @@ export class TasksController {
 
   @Post(':id/approve')
   @HttpCode(200)
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Approve — TESTING→COMPLETED (ADMIN only)' })
+  @Roles(Role.ADMIN, Role.MODERATOR)
+  @ApiOperation({ summary: 'Approve — TESTING→COMPLETED (ADMIN & MODERATOR)' })
   @ApiResponse({ status: 200, description: 'Task approved' })
   @ApiResponse({ status: 400, description: 'Illegal transition' })
   approve(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     return this.tasks.approve(id, actor);
   }
 
+  @Post(':id/publish')
+  @HttpCode(200)
+  @Roles(Role.ADMIN, Role.MODERATOR)
+  @ApiOperation({ summary: 'Publish — COMPLETED→PUBLISHED (ADMIN & MODERATOR)' })
+  @ApiResponse({ status: 200, description: 'Task published' })
+  @ApiResponse({ status: 400, description: 'Illegal transition' })
+  publish(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+    return this.tasks.publish(id, actor);
+  }
+
   @Post(':id/return')
   @HttpCode(200)
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Return for rework — TESTING→RETURNED (ADMIN only)' })
+  @Roles(Role.ADMIN, Role.MODERATOR)
+  @ApiOperation({ summary: 'Return for rework — TESTING/COMPLETED→RETURNED (ADMIN & MODERATOR)' })
   @ApiResponse({ status: 200, description: 'Task returned' })
   @ApiResponse({ status: 400, description: 'Illegal transition' })
   returnTask(@Param('id') id: string, @Body() dto: ReturnTaskDto, @CurrentUser() actor: AuthUser) {

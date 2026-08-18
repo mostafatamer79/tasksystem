@@ -11,6 +11,8 @@ import { TasksModule } from './tasks/tasks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { PlansModule } from './plans/plans.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { AuditModule } from './audit/audit.module';
     DashboardModule,
     NotificationsModule,
     AuditModule,
+    AttendanceModule,
+    PlansModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
