@@ -990,9 +990,9 @@
     "semantic_hash": "e27ea8e8bccd3a41a91f69fbe327e3ce"
   },
   "package.json": {
-    "mtime": 1788628040.6724894,
-    "seen": 1788628222.4739945,
-    "ast_hash": "5d60e3973d1005c854481ac7f3737214",
+    "mtime": 1788639922.5447803,
+    "seen": 1788639960.5441432,
+    "ast_hash": "4f161bfe8fd5ea9172ec867080857b43",
     "semantic_hash": ""
   },
   ".codex/skills/superpowers/brainstorming/scripts/helper.js": {

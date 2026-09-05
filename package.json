@@ -14,7 +14,7 @@
     "dev:web": "npm run dev -w apps/web",
     "build:web": "npm run build -w apps/web",
     "lint:web": "npm run lint -w apps/web",
-    "prepare": "husky"
+    "prepare": "node -e \"if (!process.env.VERCEL) { try { require('child_process').execSync('husky', { stdio: 'inherit' }); } catch (e) {} }\""
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
