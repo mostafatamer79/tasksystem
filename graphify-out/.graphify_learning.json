@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-09-05T16:48:59.890103+00:00",
+  "nodes": {
+    "apps_api_src_workflow_workflow_service_workflowservice_spawnautomatedchildtask": {
+      "code_fingerprint": "f6b5a8a41c0569f7c8f59646cdacc7c8eba85647225b692b3531413acbec636e",
+      "label": ".spawnAutomatedChildTask()",
+      "last": "2026-09-05T16:14:44.629043+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-05T16:14:44.629043+00:00",
+          "outcome": "useful",
+          "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
+        }
+      ],
+      "score": 0.999450537,
+      "source_file": "apps/api/src/workflow/workflow.service.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "apps_api_src_workflow_workflow_templates": {
+      "code_fingerprint": "837745cc8ad08f18b73cc7900c8b15497b2bcb851da984f93dce6f3a83cf9e31",
+      "label": "workflow-templates.ts",
+      "last": "2026-09-05T16:14:44.629043+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-05T16:14:44.629043+00:00",
+          "outcome": "useful",
+          "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
+        }
+      ],
+      "score": 0.999450537,
+      "source_file": "apps/api/src/workflow/workflow-templates.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "apps_web_src_app_locale_app_dashboard_page": {
+      "code_fingerprint": "94245eb227cb619bab009ef40735eb8f6281e2c3633a8b5a9f4a4ced07ed2ad0",
+      "label": "dashboard/page.tsx",
+      "last": "2026-09-05T16:14:44.629043+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-05T16:14:44.629043+00:00",
+          "outcome": "useful",
+          "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
+        }
+      ],
+      "score": 0.999450537,
+      "source_file": "apps/web/src/app/[locale]/(app)/dashboard/page.tsx",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}
