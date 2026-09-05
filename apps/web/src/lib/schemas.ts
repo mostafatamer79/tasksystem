@@ -41,6 +41,7 @@ export const nextTaskDefinitionSchema: z.ZodType<import('./types').NextTaskDefin
 export const createTaskSchema = z
   .object({
     title: z.string().min(1, 'Title is required').max(200),
+    workflowTemplateId: z.string().optional(),
     description: z.string().optional(),
     priority: priorityEnum,
     dueDate: z.string().optional(),
@@ -69,6 +70,7 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  workflowTemplateId: z.string().optional(),
   description: z.string().optional(),
   priority: priorityEnum.optional(),
   status: taskStatusEnum.optional(),
@@ -101,6 +103,7 @@ export const planTaskSchema = z.object({
   date: z.string().min(1, 'Date is required'),
   dayName: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
+  workflowTemplateId: z.string().optional(),
   content: z.string().optional(),
   material: z.string().optional(),
   notes: z.string().optional(),

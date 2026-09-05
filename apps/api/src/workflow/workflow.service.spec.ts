@@ -7,11 +7,14 @@ import { TaskStatus, Role, Priority } from '@prisma/client';
 
 function createMockTx(overrides: Record<string, jest.Mock> = {}) {
   return {
+    $queryRaw: jest.fn().mockResolvedValue([{ id: 'plan-1' }]),
     task: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
     taskHistory: {
       create: jest.fn(),
@@ -26,6 +29,7 @@ function createMockTx(overrides: Record<string, jest.Mock> = {}) {
       aggregate: jest.fn().mockResolvedValue({ _max: { sortOrder: 0 } }),
       create: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
     ...overrides,
   };
@@ -279,6 +283,136 @@ describe('WorkflowService', () => {
 
       expect(result).toBeNull();
       expect(tx.task.create).not.toHaveBeenCalled();
+    });
+
+    it('updates the newest active tomorrow task and removes active duplicates', async () => {
+      const tx = createMockTx();
+      const planTask = {
+        id: 'plan-task-current',
+        planId: 'plan-1',
+        title: ' مواعيد   بكرا ',
+        workflowTemplateId: 'tomorrow-appointments',
+        isAutomated: true,
+        nextTaskDueDays: 1,
+        nextTaskPriority: Priority.MEDIUM,
+        date: new Date('2026-09-05T00:00:00.000Z'),
+      };
+      tx.task.findMany.mockResolvedValue([
+        { id: 'newest', title: ' مواعيد   بكرا ', status: TaskStatus.TODO, updatedAt: new Date('2026-09-05') },
+        { id: 'older', title: 'مواعيد بكرا', status: TaskStatus.IN_PROGRESS, updatedAt: new Date('2026-09-04') },
+      ]);
+      tx.task.update.mockResolvedValue({ id: 'newest', title: 'مواعيد بكرا' });
+
+      const result = await service.handlePlanTaskReady(tx as any, planTask, 'actor-1');
+
+      expect(result).toBe('newest');
+      expect(tx.task.update).toHaveBeenCalledWith({
+        where: { id: 'newest' },
+        data: expect.objectContaining({ title: 'مواعيد بكرا', assignedToId: 'actor-1' }),
+      });
+      expect(tx.planTask.deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: { not: 'plan-task-current' },
+          taskId: { in: ['newest', 'older'] },
+        },
+      });
+      expect(tx.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['older'] } } });
+      expect(tx.task.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps completed tomorrow history and creates a new active occurrence', async () => {
+      const tx = createMockTx();
+      const planTask = {
+        id: 'plan-task-current',
+        planId: 'plan-1',
+        title: 'مواعيد بكرا',
+        workflowTemplateId: 'tomorrow-appointments',
+        isAutomated: true,
+        date: new Date('2026-09-05T00:00:00.000Z'),
+      };
+      tx.task.findMany.mockResolvedValue([]);
+      tx.task.create.mockResolvedValue({ id: 'fresh', title: 'مواعيد بكرا' });
+
+      const result = await service.handlePlanTaskReady(tx as any, planTask, 'actor-1');
+
+      expect(result).toBe('fresh');
+      expect(tx.task.findMany).toHaveBeenCalledWith({
+        where: {
+          planTask: { planId: 'plan-1' },
+          workflowTemplateId: 'tomorrow-appointments',
+          status: { notIn: [TaskStatus.COMPLETED, TaskStatus.PUBLISHED] },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+      expect(tx.task.create).toHaveBeenCalled();
+    });
+
+    it('does not reconcile an ordinary same-title task without template identity', async () => {
+      const tx = createMockTx();
+      const planTask = {
+        id: 'ordinary-plan-task',
+        planId: 'plan-1',
+        title: 'مواعيد بكرا',
+        isAutomated: true,
+        date: new Date('2026-09-05T00:00:00.000Z'),
+      };
+      tx.task.create.mockResolvedValue({ id: 'ordinary-task', title: 'مواعيد بكرا' });
+
+      await service.handlePlanTaskReady(tx as any, planTask, 'actor-1');
+
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+      expect(tx.task.findMany).not.toHaveBeenCalled();
+      expect(tx.task.deleteMany).not.toHaveBeenCalled();
+      expect(tx.task.create).toHaveBeenCalled();
+    });
+
+    it('removes older active linked template tasks after a new plan link is added', async () => {
+      const tx = createMockTx();
+      tx.task.findMany.mockResolvedValue([
+        { id: 'new-task', workflowTemplateId: 'tomorrow-appointments' },
+        { id: 'old-task', workflowTemplateId: 'tomorrow-appointments' },
+      ]);
+
+      const result = await service.reconcileLinkedPlanTask(tx as any, {
+        id: 'new-plan-task',
+        planId: 'plan-1',
+        taskId: 'new-task',
+        workflowTemplateId: 'tomorrow-appointments',
+      });
+
+      expect(result).toBe('new-task');
+      expect(tx.task.update).toHaveBeenCalledWith({
+        where: { id: 'new-task' },
+        data: { workflowTemplateId: 'tomorrow-appointments' },
+      });
+      expect(tx.planTask.deleteMany).toHaveBeenCalledWith({
+        where: { id: { not: 'new-plan-task' }, taskId: { in: ['new-task', 'old-task'] } },
+      });
+      expect(tx.task.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['old-task'] } } });
+    });
+
+    it('repoints an older current link to the newest canonical template task', async () => {
+      const tx = createMockTx();
+      tx.task.findMany.mockResolvedValue([
+        { id: 'newest-task', updatedAt: new Date('2026-09-05') },
+        { id: 'older-current-task', updatedAt: new Date('2026-09-04') },
+      ]);
+
+      const result = await service.reconcileLinkedPlanTask(tx as any, {
+        id: 'current-plan-task',
+        planId: 'plan-1',
+        taskId: 'older-current-task',
+        workflowTemplateId: 'tomorrow-appointments',
+      });
+
+      expect(result).toBe('newest-task');
+      expect(tx.planTask.update).toHaveBeenCalledWith({
+        where: { id: 'current-plan-task' },
+        data: { taskId: 'newest-task' },
+      });
+      expect(tx.task.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['older-current-task'] } },
+      });
     });
   });
 });

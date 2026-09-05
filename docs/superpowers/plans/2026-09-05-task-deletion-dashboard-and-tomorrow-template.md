@@ -18,7 +18,7 @@
 - Clearing the archive always deletes every `ArchivedStat` row and never deletes a live task.
 - Template uniqueness is per plan and only for active tasks whose status is neither `COMPLETED` nor `PUBLISHED`.
 - Preserve the existing project package manager and dependency versions.
-- No database migration is required.
+- Add nullable `workflowTemplateId` fields to `Task` and `PlanTask`, backfill the legacy template rows, and deploy the migration before application code.
 
 ---
 
@@ -31,6 +31,7 @@
 - `apps/api/src/workflow/workflow-templates.ts`: declares the stable `tomorrow-appointments` template.
 - `apps/api/src/workflow/workflow.service.spec.ts`: specifies normalized matching, canonical updates, and duplicate removal.
 - `apps/api/src/workflow/workflow.service.ts`: reconciles generated tomorrow tasks within a plan transaction.
+- `apps/api/prisma/migrations/20260905180000_add_workflow_template_identity/migration.sql`: persists and backfills stable template identity.
 - `apps/web/src/lib/types.ts`: publishes deletion request/response types.
 - `apps/web/src/lib/hooks.ts`: sends deletion and archive-clear requests and invalidates task/dashboard queries.
 - `apps/web/src/app/[locale]/(app)/tasks/page.tsx`: renders the delete-options and archive-clear interactions.
@@ -274,7 +275,7 @@ Expected: PASS and the template select compiles with the extended response type.
 
 **Interfaces:**
 - Consumes all earlier task outputs.
-- Produces a verified, deployable feature with no migration step.
+- Produces a verified, deployable feature with a forward-only migration applied before the application release.
 
 - [ ] **Step 1: Run API tests**
 
@@ -302,7 +303,7 @@ Run: `git diff --check`
 
 Run: `git status --short`
 
-Confirm that no database migration, generated artifact, environment file, or unrelated user file was added.
+Confirm that only the planned database migration was added and that no generated artifact, environment file, or unrelated user file was added.
 
 - [ ] **Step 5: Commit the feature**
 

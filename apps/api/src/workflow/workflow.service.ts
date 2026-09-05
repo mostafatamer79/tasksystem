@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { BalancedAssignmentStrategy } from '../tasks/strategies/balanced.strategy';
 import { Task, TaskStatus, Role, Priority, Prisma } from '@prisma/client';
+import {
+  TOMORROW_APPOINTMENTS_TEMPLATE_ID,
+  TOMORROW_APPOINTMENTS_TITLE,
+} from './workflow-templates';
 
 export type NextTaskCondition = 'ON_SUCCESS' | 'ON_RETURN';
 
@@ -20,6 +24,10 @@ export interface NextTaskDefinition {
 
 function isNextTaskDefinitionArray(value: unknown): value is NextTaskDefinition[] {
   return Array.isArray(value);
+}
+
+export function normalizeWorkflowTitle(title: string): string {
+  return title.normalize('NFC').trim().replace(/\s+/gu, ' ');
 }
 
 @Injectable()
@@ -125,30 +133,35 @@ export class WorkflowService {
         );
 
     const dueDate = this.computeDueDate(planTask.nextTaskDueDays);
+    const taskData = {
+      title: normalizeWorkflowTitle(planTask.nextTaskTitle || planTask.title),
+      workflowTemplateId: planTask.workflowTemplateId ?? null,
+      description: planTask.nextTaskDescription || '',
+      priority: planTask.nextTaskPriority || Priority.MEDIUM,
+      status: TaskStatus.TODO,
+      dueDate,
+      assignedToId: assigneeId,
+      createdById: actorId,
+      // Copy workflow configuration so the spawned task can continue the chain.
+      isAutomated: !!planTask.nextTaskTitle,
+      triggerStatus: planTask.nextTaskTitle ? TaskStatus.COMPLETED : null,
+      nextTaskTitle: planTask.nextTaskTitle ?? null,
+      nextTaskDescription: planTask.nextTaskDescription ?? null,
+      nextTaskAssigneeId: planTask.nextTaskAssigneeId ?? null,
+      nextTaskAssigneeRole: planTask.nextTaskAssigneeRole ?? null,
+      nextTaskDueDays: planTask.nextTaskDueDays ?? null,
+      nextTaskPriority: planTask.nextTaskPriority ?? null,
+      requiresPublishing: planTask.requiresPublishing ?? false,
+      nextTasks: planTask.nextTasks ?? null,
+      rootTaskId: null,
+      parentTaskId: null,
+    };
+
+    const reconciledTaskId = await this.reconcileTomorrowAppointmentsTask(tx, planTask, taskData);
+    if (reconciledTaskId) return reconciledTaskId;
 
     const nextTask = await tx.task.create({
-      data: {
-        title: planTask.nextTaskTitle || planTask.title,
-        description: planTask.nextTaskDescription || '',
-        priority: planTask.nextTaskPriority || Priority.MEDIUM,
-        status: TaskStatus.TODO,
-        dueDate,
-        assignedToId: assigneeId,
-        createdById: actorId,
-        // Copy workflow configuration so the spawned task can continue the chain.
-        isAutomated: !!planTask.nextTaskTitle,
-        triggerStatus: planTask.nextTaskTitle ? TaskStatus.COMPLETED : null,
-        nextTaskTitle: planTask.nextTaskTitle ?? null,
-        nextTaskDescription: planTask.nextTaskDescription ?? null,
-        nextTaskAssigneeId: planTask.nextTaskAssigneeId ?? null,
-        nextTaskAssigneeRole: planTask.nextTaskAssigneeRole ?? null,
-        nextTaskDueDays: planTask.nextTaskDueDays ?? null,
-        nextTaskPriority: planTask.nextTaskPriority ?? null,
-        requiresPublishing: planTask.requiresPublishing ?? false,
-        nextTasks: planTask.nextTasks ?? null,
-        rootTaskId: null,
-        parentTaskId: null,
-      },
+      data: taskData,
     });
 
     await tx.taskHistory.create({
@@ -174,6 +187,113 @@ export class WorkflowService {
     this.gateway.emitToUser(assigneeId, 'notification', notification);
 
     return nextTask.id;
+  }
+
+  private async reconcileTomorrowAppointmentsTask(
+    tx: Prisma.TransactionClient,
+    planTask: any,
+    taskData: Prisma.TaskUncheckedCreateInput,
+  ): Promise<string | null> {
+    if (
+      !planTask.planId ||
+      planTask.workflowTemplateId !== TOMORROW_APPOINTMENTS_TEMPLATE_ID
+    ) return null;
+
+    await this.lockPlan(tx, planTask.planId);
+    const tomorrowTitle = normalizeWorkflowTitle(TOMORROW_APPOINTMENTS_TITLE);
+
+    const activePlanTasks = await tx.task.findMany({
+      where: {
+        planTask: { planId: planTask.planId },
+        workflowTemplateId: TOMORROW_APPOINTMENTS_TEMPLATE_ID,
+        status: { notIn: [TaskStatus.COMPLETED, TaskStatus.PUBLISHED] },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const matches = activePlanTasks.filter((task) => normalizeWorkflowTitle(task.title) === tomorrowTitle);
+    const canonical = matches[0];
+    if (!canonical) return null;
+
+    const duplicateIds = matches.slice(1).map((task) => task.id);
+    await tx.task.update({
+      where: { id: canonical.id },
+      data: {
+        title: tomorrowTitle,
+        workflowTemplateId: TOMORROW_APPOINTMENTS_TEMPLATE_ID,
+        description: taskData.description,
+        priority: taskData.priority,
+        dueDate: taskData.dueDate,
+        assignedToId: taskData.assignedToId,
+        isAutomated: taskData.isAutomated,
+        triggerStatus: taskData.triggerStatus,
+        nextTaskTitle: taskData.nextTaskTitle,
+        nextTaskDescription: taskData.nextTaskDescription,
+        nextTaskAssigneeId: taskData.nextTaskAssigneeId,
+        nextTaskAssigneeRole: taskData.nextTaskAssigneeRole,
+        nextTaskDueDays: taskData.nextTaskDueDays,
+        nextTaskPriority: taskData.nextTaskPriority,
+        requiresPublishing: taskData.requiresPublishing,
+        nextTasks: taskData.nextTasks,
+      },
+    });
+
+    await tx.planTask.deleteMany({
+      where: {
+        id: { not: planTask.id },
+        taskId: { in: matches.map((task) => task.id) },
+      },
+    });
+    if (duplicateIds.length > 0) {
+      await tx.task.deleteMany({ where: { id: { in: duplicateIds } } });
+    }
+    return canonical.id;
+  }
+
+  async reconcileLinkedPlanTask(
+    tx: Prisma.TransactionClient,
+    planTask: { id: string; planId: string; taskId: string | null; workflowTemplateId?: string | null },
+  ): Promise<string | null> {
+    if (
+      !planTask.taskId ||
+      planTask.workflowTemplateId !== TOMORROW_APPOINTMENTS_TEMPLATE_ID
+    ) return planTask.taskId;
+
+    await this.lockPlan(tx, planTask.planId);
+    await tx.task.update({
+      where: { id: planTask.taskId },
+      data: { workflowTemplateId: TOMORROW_APPOINTMENTS_TEMPLATE_ID },
+    });
+    const activeMatches = await tx.task.findMany({
+      where: {
+        planTask: { planId: planTask.planId },
+        workflowTemplateId: TOMORROW_APPOINTMENTS_TEMPLATE_ID,
+        status: { notIn: [TaskStatus.COMPLETED, TaskStatus.PUBLISHED] },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const canonical = activeMatches[0];
+    if (!canonical) return planTask.taskId;
+    const duplicateIds = activeMatches.slice(1).map((task) => task.id);
+    await tx.planTask.deleteMany({
+      where: {
+        id: { not: planTask.id },
+        taskId: { in: activeMatches.map((task) => task.id) },
+      },
+    });
+    if (planTask.taskId !== canonical.id) {
+      await tx.planTask.update({
+        where: { id: planTask.id },
+        data: { taskId: canonical.id },
+      });
+    }
+    if (duplicateIds.length > 0) {
+      await tx.task.deleteMany({ where: { id: { in: duplicateIds } } });
+    }
+    return canonical.id;
+  }
+
+  private async lockPlan(tx: Prisma.TransactionClient, planId: string): Promise<void> {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Plan" WHERE "id" = ${planId} FOR UPDATE`);
   }
 
   private async triggerNextAutomatedTasks(

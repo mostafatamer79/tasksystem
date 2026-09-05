@@ -54,7 +54,7 @@ The dialog summarizes the destructive result before confirmation. The separate a
 
 ## `مواعيد بكرا` Template
 
-Add a stable built-in template identifier, `tomorrow-appointments`, displayed as `مواعيد بكرا`. Selecting it pre-fills the task title and relevant workflow configuration through the existing workflow-template mechanism. Title comparisons use a normalized value: Unicode-normalized, trimmed, and with repeated internal whitespace collapsed. The stable template identifier is preferred over comparing localized display copy wherever it is available.
+Add a stable built-in template identifier, `tomorrow-appointments`, displayed as `مواعيد بكرا`. Persist that identity in nullable `Task.workflowTemplateId` and `PlanTask.workflowTemplateId` fields. Selecting it pre-fills the task title, one-day due date, medium priority, and relevant workflow configuration through the existing workflow-template mechanism. Title comparisons use a normalized value: Unicode-normalized, trimmed, and with repeated internal whitespace collapsed; destructive reconciliation requires the stable template identity and never relies on title alone.
 
 Within a single plan, only one active generated task for this template may exist. “Active” means any status other than `COMPLETED` or `PUBLISHED`.
 
@@ -103,7 +103,7 @@ Frontend coverage focuses on request payload construction, dialog validation, qu
 
 ## Compatibility and Migration
 
-No schema migration is required for the initial implementation because the existing `PlanTask.taskId`, task automation fields, and `ArchivedStat` table can express the design. The API keeps `ids` and `all` compatibility. The legacy `allCompleted` input is translated to `all: true` plus `status: COMPLETED` during the transition, then may be removed in a separately versioned cleanup.
+A forward-only schema migration adds nullable `workflowTemplateId` columns and supporting indexes to `Task` and `PlanTask`. Existing rows remain compatible. The migration backfills legacy automated, publishing-required `مواعيد بكرا` tasks and their plan links with the stable identifier. Production applies this migration with `prisma migrate deploy` before the updated API starts. The API keeps `ids` and `all` compatibility. The legacy `allCompleted` input is translated to `all: true` plus `status: COMPLETED` during the transition, then may be removed in a separately versioned cleanup.
 
 ## Assumptions
 

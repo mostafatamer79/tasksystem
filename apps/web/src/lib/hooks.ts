@@ -5,8 +5,10 @@ import { api, errorMessage } from './api';
 import type {
   AdminCharts,
   AdminStats,
+  BulkDeleteTasksInput,
   Attendance,
   Comment,
+  DeleteTasksResult,
   EmployeeStats,
   EmployeeTaskStats,
   NotificationsPage,
@@ -137,7 +139,17 @@ export function useDeleteTask() {
 export function useBulkDeleteTasks() {
   const invalidate = useInvalidateTasks();
   return useMutation({
-    mutationFn: async (dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }) => (await api.post('/tasks/bulk-delete', dto)).data,
+    mutationFn: async (dto: BulkDeleteTasksInput) =>
+      (await api.post<DeleteTasksResult>('/tasks/bulk-delete', dto)).data,
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useClearDashboardArchive() {
+  const invalidate = useInvalidateTasks();
+  return useMutation({
+    mutationFn: async () =>
+      (await api.delete<DeleteTasksResult>('/tasks/dashboard-archive')).data,
     onSuccess: () => invalidate(),
   });
 }

@@ -1,5 +1,6 @@
 import { WorkflowService } from '../workflow/workflow.service';
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -20,6 +21,7 @@ import {
   ReturnTaskDto,
   UpdateTaskDto,
 } from './dto/task.dto';
+import { BulkDeleteTasksDto } from './dto/bulk-delete-tasks.dto';
 
 @Injectable()
 export class TasksService {
@@ -135,50 +137,27 @@ export class TasksService {
     await this.bulkDelete({ ids: [id] }, actor);
   }
 
-  async bulkDelete(dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }, actor: AuthUser) {
-    let tasks: Task[] = [];
-    if (dto.all) {
-      tasks = await this.prisma.task.findMany();
-    } else if (dto.allCompleted) {
-      tasks = await this.prisma.task.findMany({ where: { status: TaskStatus.COMPLETED } });
-    } else if (dto.ids?.length) {
-      tasks = await this.prisma.task.findMany({ where: { id: { in: dto.ids } } });
-    }
-    if (!tasks.length) return;
+  async bulkDelete(dto: BulkDeleteTasksDto, actor: AuthUser): Promise<{ deletedCount: number }> {
+    const where = this.buildBulkDeleteWhere(dto);
+    const result = await this.runSerializableTransaction(async (tx) => {
+      const tasks = await tx.task.findMany({ where });
+      if (!tasks.length) return { deletedCount: 0 };
 
-    // Calculate aggregated stats
-    const statsUpdate = new Map<string, number>();
-    const inc = (k: string) => statsUpdate.set(k, (statsUpdate.get(k) ?? 0) + 1);
-
-    for (const t of tasks) {
-      inc('global_total');
-      inc(`global_status_${t.status}`);
-      inc(`global_priority_${t.priority}`);
-      inc(`user_${t.assignedToId}_total`);
-      inc(`user_${t.assignedToId}_status_${t.status}`);
-      if (t.status === TaskStatus.COMPLETED) {
-        const d = t.updatedAt;
-        inc(`month_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      if (!dto.removeFromDashboard) {
+        const statsUpdate = this.aggregateArchivedStats(tasks);
+        for (const [key, value] of statsUpdate.entries()) {
+          await tx.archivedStat.upsert({
+            where: { key },
+            update: { value: { increment: value } },
+            create: { key, value },
+          });
+        }
       }
-    }
 
-    // Run transaction: update ArchivedStats and delete tasks
-    await this.prisma.$transaction(async (tx) => {
-      // Upsert stats
-      for (const [key, value] of statsUpdate.entries()) {
-        await tx.archivedStat.upsert({
-          where: { key },
-          update: { value: { increment: value } },
-          create: { key, value },
-        });
-      }
-      // Delete tasks
-      await tx.planTask.deleteMany({
-        where: { taskId: { in: tasks.map((task) => task.id) } },
-      });
-      await tx.task.deleteMany({
-        where: { id: { in: tasks.map(t => t.id) } },
-      });
+      const taskIds = tasks.map((task) => task.id);
+      await tx.planTask.deleteMany({ where: { taskId: { in: taskIds } } });
+      const deleted = await tx.task.deleteMany({ where: { id: { in: taskIds } } });
+      return { deletedCount: deleted.count };
     });
 
     this.audit.log({
@@ -186,8 +165,100 @@ export class TasksService {
       action: 'TASK_BULK_DELETE',
       entity: 'Task',
       entityId: 'bulk',
-      metadata: { deletedCount: tasks.length },
+      metadata: {
+        deletedCount: result.deletedCount,
+        ids: dto.ids,
+        all: dto.all,
+        status: dto.allCompleted ? TaskStatus.COMPLETED : dto.status,
+        fromDate: dto.fromDate,
+        toDate: dto.toDate,
+        preservedDashboardStats: !dto.removeFromDashboard,
+      },
     });
+    return result;
+  }
+
+  async clearDashboardArchive(actor: AuthUser): Promise<{ deletedCount: number }> {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const deleted = await tx.archivedStat.deleteMany({});
+      return { deletedCount: deleted.count };
+    });
+    this.audit.log({
+      userId: actor.id,
+      action: 'DASHBOARD_ARCHIVE_CLEAR',
+      entity: 'ArchivedStat',
+      entityId: 'all',
+      metadata: result,
+    });
+    return result;
+  }
+
+  private buildBulkDeleteWhere(dto: BulkDeleteTasksDto): Prisma.TaskWhereInput {
+    const hasIds = Boolean(dto.ids?.length);
+    const hasBroadScope = dto.all === true || dto.allCompleted === true;
+    if (hasIds === hasBroadScope) {
+      throw new BadRequestException('Choose either selected task IDs or all tasks');
+    }
+    if (hasIds) return { id: { in: dto.ids } };
+
+    const from = dto.fromDate ? this.parseDateOnly(dto.fromDate) : undefined;
+    const to = dto.toDate ? this.parseDateOnly(dto.toDate) : undefined;
+    if (from && to && from > to) {
+      throw new BadRequestException('The start date must be on or before the end date');
+    }
+
+    const createdAt: Prisma.DateTimeFilter | undefined = from || to
+      ? {
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lt: new Date(to.getTime() + 86_400_000) } : {}),
+        }
+      : undefined;
+    return {
+      ...(dto.allCompleted ? { status: TaskStatus.COMPLETED } : dto.status ? { status: dto.status } : {}),
+      ...(createdAt ? { createdAt } : {}),
+    };
+  }
+
+  private parseDateOnly(value: string): Date {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw new BadRequestException('Dates must use YYYY-MM-DD format');
+    }
+    return date;
+  }
+
+  private aggregateArchivedStats(tasks: Task[]): Map<string, number> {
+    const stats = new Map<string, number>();
+    const increment = (key: string) => stats.set(key, (stats.get(key) ?? 0) + 1);
+    for (const task of tasks) {
+      increment('global_total');
+      increment(`global_status_${task.status}`);
+      increment(`global_priority_${task.priority}`);
+      increment(`user_${task.assignedToId}_total`);
+      increment(`user_${task.assignedToId}_status_${task.status}`);
+      if (task.status === TaskStatus.COMPLETED) {
+        const date = task.updatedAt;
+        increment(`month_${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+      }
+    }
+    return stats;
+  }
+
+  private async runSerializableTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+        if (!isWriteConflict || attempt === maxAttempts) throw error;
+      }
+    }
+    throw new Error('Serializable transaction retry limit reached');
   }
 
   async updateProgress(id: string, progress: number, actor: AuthUser) {

@@ -107,6 +107,7 @@ model PlanTask {
   plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
   taskId    String?  @unique
   task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workflowTemplateId String?
   sortOrder Int      @default(0)
   date      DateTime @db.Date
   dayName   String?
@@ -133,6 +134,7 @@ model PlanTask {
   @@index([planId])
   @@index([taskId])
   @@index([planId, sortOrder])
+  @@index([planId, workflowTemplateId])
 }
 
 model Task {
@@ -151,6 +153,7 @@ model Task {
   actualHours    Float?
   progress       Int            @default(0)
   assignmentMode AssignmentMode @default(MANUAL)
+  workflowTemplateId String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -182,6 +185,7 @@ model Task {
   @@index([dueDate])
   @@index([createdAt])
   @@index([assignedToId, status])
+  @@index([workflowTemplateId])
 }
 
 model TaskHistory {

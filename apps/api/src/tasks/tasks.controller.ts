@@ -22,6 +22,7 @@ import {
   UpdateProgressDto,
   UpdateTaskDto,
 } from './dto/task.dto';
+import { BulkDeleteTasksDto } from './dto/bulk-delete-tasks.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -81,6 +82,13 @@ export class TasksController {
     return this.tasks.update(id, dto, actor);
   }
 
+  @Delete('dashboard-archive')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Clear every archived dashboard statistic (ADMIN only)' })
+  clearDashboardArchive(@CurrentUser() actor: AuthUser) {
+    return this.tasks.clearDashboardArchive(actor);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete a task (ADMIN only)' })
@@ -94,9 +102,8 @@ export class TasksController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete selected tasks, all completed tasks, or all tasks (ADMIN only)' })
   @ApiResponse({ status: 200, description: 'Tasks deleted' })
-  async bulkDelete(@Body() dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }, @CurrentUser() actor: AuthUser) {
-    await this.tasks.bulkDelete(dto, actor);
-    return { message: 'Tasks deleted' };
+  bulkDelete(@Body() dto: BulkDeleteTasksDto, @CurrentUser() actor: AuthUser) {
+    return this.tasks.bulkDelete(dto, actor);
   }
 
   @Patch(':id/progress')
