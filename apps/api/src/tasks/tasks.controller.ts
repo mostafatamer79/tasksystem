@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { TasksService } from './tasks.service';
+import { WORKFLOW_TEMPLATES } from '../workflow/workflow-templates';
 import {
   CreateCommentDto,
   CreateTaskDto,
@@ -56,6 +57,13 @@ export class TasksController {
     return this.tasks.findAll(query, { ...actor, role: Role.EMPLOYEE });
   }
 
+  @Get('workflow-templates')
+  @ApiOperation({ summary: 'List built-in workflow templates for admins' })
+  @ApiResponse({ status: 200, description: 'Workflow templates list' })
+  getWorkflowTemplates() {
+    return WORKFLOW_TEMPLATES;
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get task details (employees: own tasks only)' })
   @ApiResponse({ status: 200, description: 'Task details' })
@@ -80,6 +88,15 @@ export class TasksController {
   async remove(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     await this.tasks.remove(id, actor);
     return { message: 'Task deleted' };
+  }
+
+  @Post('bulk-delete')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Delete selected tasks, all completed tasks, or all tasks (ADMIN only)' })
+  @ApiResponse({ status: 200, description: 'Tasks deleted' })
+  async bulkDelete(@Body() dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }, @CurrentUser() actor: AuthUser) {
+    await this.tasks.bulkDelete(dto, actor);
+    return { message: 'Tasks deleted' };
   }
 
   @Patch(':id/progress')
@@ -147,6 +164,14 @@ export class TasksController {
   @ApiResponse({ status: 201, description: 'Comment added' })
   addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() actor: AuthUser) {
     return this.tasks.addComment(id, dto.body, actor);
+  }
+
+
+  @Get(':id/flow')
+  @ApiOperation({ summary: 'Get task workflow chain' })
+  @ApiResponse({ status: 200, description: 'Workflow chain list' })
+  getTaskFlow(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+    return this.tasks.getTaskFlow(id, actor);
   }
 
   @Get(':id/comments')

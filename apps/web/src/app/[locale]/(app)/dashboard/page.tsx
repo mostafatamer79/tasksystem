@@ -21,6 +21,7 @@ import {
   Play,
   Briefcase,
   UserCircle2,
+  Globe,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import {
@@ -223,6 +224,7 @@ function EmployeeTaskCard({ emp, index }: { emp: EmployeeTaskStats; index: numbe
   const testing = useCountUp(emp.testingTasks);
   const completed = useCountUp(emp.completedTasks);
   const returned = useCountUp(emp.returnedTasks);
+  const published = useCountUp(emp.publishedTasks);
 
   const initials = emp.employeeName
     .split(' ')
@@ -237,6 +239,7 @@ function EmployeeTaskCard({ emp, index }: { emp: EmployeeTaskStats; index: numbe
     { label: t('inTesting'), value: testing, color: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300', dot: 'bg-amber-500' },
     { label: t('completed'), value: completed, color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', dot: 'bg-emerald-500' },
     { label: t('returned'), value: returned, color: 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300', dot: 'bg-rose-500' },
+    { label: t('publishedTasks'), value: published, color: 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300', dot: 'bg-sky-500' },
   ];
 
   return (
@@ -473,6 +476,7 @@ function AdminDashboard() {
         { title: t('completed'), value: s.completedTasks, icon: CheckCircle2, tone: 'emerald' as const },
         { title: t('inTesting'), value: s.testingTasks, icon: FlaskConical, tone: 'amber' as const },
         { title: t('returned'), value: s.returnedTasks, icon: RotateCcw, tone: 'rose' as const },
+        { title: t('publishedTasks'), value: s.publishedTasks, icon: Globe, tone: 'blue' as const },
         { title: t('activeEmployees'), value: s.activeEmployees, icon: Users, tone: 'violet' as const },
         { title: t('dueToday'), value: s.dueToday, icon: CalendarClock, tone: 'blue' as const },
         { title: t('overdue'), value: s.overdue, icon: AlarmClock, tone: 'rose' as const },
@@ -518,6 +522,7 @@ function EmployeeDashboard() {
         { title: t('overdue'), value: s.overdue, icon: AlarmClock, tone: 'rose' as const },
         { title: t('inTesting'), value: s.testingTasks, icon: FlaskConical, tone: 'amber' as const },
         { title: t('completed'), value: s.completedTasks, icon: CheckCircle2, tone: 'emerald' as const },
+        { title: t('publishedTasks'), value: s.publishedTasks, icon: Globe, tone: 'blue' as const },
       ]
     : [];
 

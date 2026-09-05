@@ -8,7 +8,7 @@ import { Role, TaskStatus } from '@prisma/client';
  */
 const EMPLOYEE_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> = {
   [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS],
-  [TaskStatus.IN_PROGRESS]: [TaskStatus.TESTING],
+  [TaskStatus.IN_PROGRESS]: [TaskStatus.TESTING, TaskStatus.COMPLETED],
   [TaskStatus.RETURNED]: [TaskStatus.IN_PROGRESS],
 };
 
@@ -19,6 +19,7 @@ const MODERATOR_OR_ADMIN_TRANSITIONS: Partial<Record<TaskStatus, TaskStatus[]>> 
   [TaskStatus.IN_PROGRESS]: [TaskStatus.TESTING, TaskStatus.COMPLETED, TaskStatus.PUBLISHED],
   [TaskStatus.RETURNED]: [TaskStatus.IN_PROGRESS, TaskStatus.TESTING, TaskStatus.COMPLETED, TaskStatus.PUBLISHED],
   [TaskStatus.PUBLISHED]: [TaskStatus.COMPLETED, TaskStatus.RETURNED],
+  [TaskStatus.WAITING_FOR_PUBLISHING]: [TaskStatus.PUBLISHED, TaskStatus.RETURNED],
 };
 
 @Injectable()

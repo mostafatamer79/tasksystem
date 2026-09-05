@@ -134,6 +134,14 @@ export function useDeleteTask() {
   });
 }
 
+export function useBulkDeleteTasks() {
+  const invalidate = useInvalidateTasks();
+  return useMutation({
+    mutationFn: async (dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }) => (await api.post('/tasks/bulk-delete', dto)).data,
+    onSuccess: () => invalidate(),
+  });
+}
+
 export type TaskAction = 'start' | 'submit-testing' | 'approve' | 'publish' | 'return' | 'progress';
 
 // ---------- Plans ----------
@@ -192,7 +200,7 @@ export function useDeletePlan() {
 export function usePlanAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, action, note }: { id: string; action: 'submit' | 'publish' | 'return'; note?: string }) =>
+    mutationFn: async ({ id, action, note }: { id: string; action: 'submit' | 'publish' | 'return' | 'send'; note?: string }) =>
       (await api.post<import('./types').Plan>(`/plans/${id}/${action}`, note ? { note } : {})).data,
     onSuccess: (data, { id }) => {
       qc.invalidateQueries({ queryKey: ['plans'] });
@@ -207,6 +215,47 @@ export function useBulkUpsertPlanTasks(planId: string) {
     mutationFn: async (tasks: (CreatePlanTaskInput & { id?: string })[]) =>
       (await api.put<import('./types').PlanTask[]>(`/plans/${planId}/tasks`, tasks)).data,
     onSuccess: () => invalidate(planId),
+  });
+}
+
+export function useRemovePlanTask(planId: string) {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async (planTaskId: string) => (await api.delete(`/plans/${planId}/tasks/${planTaskId}`)).data,
+    onSuccess: () => invalidate(planId),
+  });
+}
+
+export function useRemovePlanTaskFromAnyPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ planId, planTaskId }: { planId: string; planTaskId: string }) =>
+      (await api.delete(`/plans/${planId}/tasks/${planTaskId}`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plans'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+export function useRemoveAllPlanTasks(planId: string) {
+  const invalidate = useInvalidatePlans();
+  return useMutation({
+    mutationFn: async () => (await api.delete(`/plans/${planId}/tasks`)).data,
+    onSuccess: () => invalidate(planId),
+  });
+}
+
+export function useRemovePlanTaskAndTask(planId: string) {
+  const invalidatePlans = useInvalidatePlans();
+  const invalidateTasks = useInvalidateTasks();
+  return useMutation({
+    mutationFn: async (planTaskId: string) =>
+      (await api.delete(`/plans/${planId}/tasks/${planTaskId}/with-task`)).data,
+    onSuccess: () => {
+      invalidatePlans(planId);
+      invalidateTasks();
+    },
   });
 }
 
@@ -417,3 +466,25 @@ export function useChangePassword() {
 }
 
 export { errorMessage };
+
+export function useTaskFlow(taskId: string, open: boolean = true) {
+  return useQuery({
+    queryKey: ['task-flow', taskId],
+    queryFn: async () => {
+      const { data } = await api.get<Task[]>(`/tasks/${taskId}/flow`);
+      return data;
+    },
+    enabled: !!taskId && open,
+  });
+}
+
+export function useWorkflowTemplates(enabled = true) {
+  return useQuery({
+    queryKey: ['workflow-templates'],
+    queryFn: async () => {
+      const { data } = await api.get<import('./types').WorkflowTemplate[]>('/tasks/workflow-templates');
+      return data;
+    },
+    enabled,
+  });
+}

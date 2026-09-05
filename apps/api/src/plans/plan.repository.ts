@@ -24,6 +24,14 @@ export const planInclude = {
 export class PlanRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  private sanitizePlanTaskData<T extends { nextTasks?: unknown }>(task: T): Omit<T, 'nextTasks'> & { nextTasks?: Prisma.InputJsonValue } {
+    const { nextTasks, ...rest } = task;
+    return {
+      ...rest,
+      ...(nextTasks ? { nextTasks: nextTasks as Prisma.InputJsonValue } : {}),
+    } as Omit<T, 'nextTasks'> & { nextTasks?: Prisma.InputJsonValue };
+  }
+
   async findAll(query: QueryPlansDto, actor: AuthUser): Promise<Paginated<Plan>> {
     const where: Prisma.PlanWhereInput = {
       ...(query.status ? { status: query.status } : {}),
@@ -76,7 +84,7 @@ export class PlanRepository {
       if (tasks.length > 0) {
         await tx.planTask.createMany({
           data: tasks.map((t, index) => ({
-            ...t,
+            ...this.sanitizePlanTaskData(t),
             planId: plan.id,
             sortOrder: t.sortOrder ?? index,
           })),
@@ -99,54 +107,80 @@ export class PlanRepository {
   }
 
   async upsertTasks(planId: string, tasks: UpsertPlanTaskDto[]): Promise<PlanTask[]> {
-    return this.prisma.$transaction(async (tx) => {
-      const existingTasks = await tx.planTask.findMany({ where: { planId } });
-      const existingIds = existingTasks.map((t) => t.id);
-      const newIds = tasks.map((t) => t.id).filter(Boolean) as string[];
+    return this.prisma.$transaction(async (tx) => this.upsertTasksInTx(tx, planId, tasks));
+  }
 
-      const toDelete = existingIds.filter((id) => !newIds.includes(id));
-      if (toDelete.length > 0) {
-        await tx.planTask.deleteMany({ where: { id: { in: toDelete } } });
+  async upsertTasksInTx(
+    tx: Prisma.TransactionClient,
+    planId: string,
+    tasks: UpsertPlanTaskDto[],
+  ): Promise<PlanTask[]> {
+    const existingTasks = await tx.planTask.findMany({ where: { planId } });
+    const existingIds = existingTasks.map((t) => t.id);
+    const newIds = tasks.map((t) => t.id).filter(Boolean) as string[];
+
+    const toDelete = existingIds.filter((id) => !newIds.includes(id));
+    if (toDelete.length > 0) {
+      await tx.planTask.deleteMany({ where: { id: { in: toDelete } } });
+    }
+
+    for (const [index, task] of tasks.entries()) {
+      const sortOrder = task.sortOrder ?? index;
+      const sanitized = this.sanitizePlanTaskData(task);
+      if (task.id) {
+        await tx.planTask.update({
+          where: { id: task.id },
+          data: { ...sanitized, sortOrder, planId } as Prisma.PlanTaskUncheckedUpdateInput,
+        });
+      } else {
+        await tx.planTask.create({
+          data: { ...sanitized, sortOrder, planId } as Prisma.PlanTaskUncheckedCreateInput,
+        });
       }
+    }
 
-      for (const [index, task] of tasks.entries()) {
-        const sortOrder = task.sortOrder ?? index;
-        if (task.id) {
-          await tx.planTask.update({
-            where: { id: task.id },
-            data: { ...task, sortOrder, planId },
-          });
-        } else {
-          await tx.planTask.create({
-            data: { ...task, sortOrder, planId },
-          });
-        }
-      }
-
-      return tx.planTask.findMany({ where: { planId }, orderBy: { sortOrder: 'asc' } });
-    });
+    return tx.planTask.findMany({ where: { planId }, orderBy: { sortOrder: 'asc' } });
   }
 
   async addTask(planId: string, data: CreatePlanTaskDto): Promise<PlanTask> {
-    const maxSort = await this.prisma.planTask.aggregate({
+    return this.prisma.$transaction(async (tx) => this.addTaskInTx(tx, planId, data));
+  }
+
+  async addTaskInTx(
+    tx: Prisma.TransactionClient,
+    planId: string,
+    data: CreatePlanTaskDto,
+  ): Promise<PlanTask> {
+    const maxSort = await tx.planTask.aggregate({
       where: { planId },
       _max: { sortOrder: true },
     });
     const nextSort = (maxSort._max.sortOrder ?? -1) + 1;
 
-    return this.prisma.planTask.create({
+    return tx.planTask.create({
       data: {
-        ...data,
+        ...this.sanitizePlanTaskData(data),
         planId,
         sortOrder: data.sortOrder ?? nextSort,
-      },
+      } as Prisma.PlanTaskUncheckedCreateInput,
     });
   }
 
   async updateTask(taskId: string, data: UpdatePlanTaskDto): Promise<PlanTask> {
     return this.prisma.planTask.update({
       where: { id: taskId },
-      data,
+      data: data as Prisma.PlanTaskUncheckedUpdateInput,
+    });
+  }
+
+  async updateTaskInTx(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    data: UpdatePlanTaskDto,
+  ): Promise<PlanTask> {
+    return tx.planTask.update({
+      where: { id: taskId },
+      data: data as Prisma.PlanTaskUncheckedUpdateInput,
     });
   }
 

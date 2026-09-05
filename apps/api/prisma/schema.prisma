@@ -14,6 +14,12 @@ enum Role {
 }
 
 enum TaskStatus {
+  DRAFT
+  PENDING
+  WAITING_FOR_REVIEW
+  WAITING_FOR_PUBLISHING
+  REJECTED
+  CANCELLED
   TODO
   IN_PROGRESS
   TESTING
@@ -109,6 +115,18 @@ model PlanTask {
   material  String?
   notes     String?
   isReady   Boolean  @default(false)
+
+  // Task Workflow Configuration
+  isAutomated          Boolean     @default(false)
+  nextTaskTitle        String?
+  nextTaskDescription  String?
+  nextTaskAssigneeId   String?
+  nextTaskAssigneeRole Role?
+  nextTaskDueDays      Int?
+  nextTaskPriority     Priority?
+  requiresPublishing   Boolean     @default(false)
+  nextTasks            Json?       // Array of { title, description?, assigneeId?, assigneeRole?, dueDays?, priority?, requiresPublishing?, condition? }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -135,6 +153,23 @@ model Task {
   assignmentMode AssignmentMode @default(MANUAL)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+
+
+  // Task Workflow Configuration
+  isAutomated          Boolean     @default(false)
+  triggerStatus        TaskStatus?
+  nextTaskTitle        String?
+  nextTaskDescription  String?
+  nextTaskAssigneeId   String?
+  nextTaskAssigneeRole Role?
+  nextTaskDueDays      Int?
+  nextTaskPriority     Priority?
+  requiresPublishing   Boolean     @default(false)
+  nextTasks            Json?       // Array of { title, description?, assigneeId?, assigneeRole?, dueDays?, priority?, requiresPublishing?, condition? }
+  rootTaskId           String?
+  parentTaskId         String?
+  parentTask           Task?       @relation("TaskFlow", fields: [parentTaskId], references: [id])
+  childTasks           Task[]      @relation("TaskFlow")
 
   history       TaskHistory[]
   comments      Comment[]
@@ -245,4 +280,10 @@ model AttendancePause {
   createdAt    DateTime   @default(now())
 
   @@index([attendanceId])
+}
+
+model ArchivedStat {
+  id    String @id @default(uuid())
+  key   String @unique
+  value Int    @default(0)
 }

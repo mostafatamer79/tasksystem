@@ -4,4 +4,6 @@ build/
 *.log
 coverage/
 .DS_Store
+.vercel
+.env*
 config.bat

@@ -1,5 +1,6 @@
 import { PrismaClient, Role, TaskStatus, Priority } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedWorkflows } from './seeds/workflows.seed';
 
 const prisma = new PrismaClient();
 
@@ -74,7 +75,9 @@ async function main() {
     });
   }
 
-  console.log('Seed complete. Admin: admin@example.com / Admin123!');
+  console.log('Base seed complete. Admin: admin@example.com / Admin123!');
+
+  await seedWorkflows();
 }
 
 main()

@@ -3,10 +3,18 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Plus, Search, Trash2, Pencil } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, BookOpen, CheckCircle2, Link2Off } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { useTasks, useDeleteTask, useEmployees, errorMessage } from '@/lib/hooks';
+import {
+  useTasks,
+  useDeleteTask,
+  useEmployees,
+  useTaskAction,
+  useBulkDeleteTasks,
+  useRemovePlanTaskFromAnyPlan,
+  errorMessage,
+} from '@/lib/hooks';
 import { PRIORITIES, TASK_STATUSES, type Priority, type Task, type TaskStatus } from '@/lib/types';
 import { formatDate, remainingDays, cn } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/shared/data-table';
@@ -27,18 +35,24 @@ export default function TasksPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
+  const isModeratorOrAdmin = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<TaskStatus | ''>('');
   const [priority, setPriority] = useState<Priority | ''>('');
   const [assignedToId, setAssignedToId] = useState('');
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState('dueDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
+
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const bulkDelete = useBulkDeleteTasks();
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<'selected' | 'completed' | 'all'>('selected');
 
   const query = {
     page,
@@ -53,6 +67,8 @@ export default function TasksPage() {
   const tasks = useTasks(query, !isAdmin);
   const employees = useEmployees(isAdmin);
   const deleteTask = useDeleteTask();
+  const removePlanTask = useRemovePlanTaskFromAnyPlan();
+  const taskAction = useTaskAction();
 
   const onSort = (key: string) => {
     if (sortBy === key) {
@@ -73,6 +89,12 @@ export default function TasksPage() {
         <div className="max-w-[280px]">
           <p className="truncate font-medium">{t.title}</p>
           {t.description && <p className="truncate text-xs text-muted-foreground">{t.description}</p>}
+          {t.planTask?.plan && (
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-blue-500/20 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <BookOpen className="h-3.5 w-3.5" />
+              {t.planTask.plan.title}
+            </span>
+          )}
         </div>
       ),
     },
@@ -105,7 +127,7 @@ export default function TasksPage() {
         return (
           <div className="whitespace-nowrap">
             <p>{formatDate(task.dueDate)}</p>
-            {days !== null && task.status !== 'COMPLETED' && (
+            {days !== null && task.status !== 'COMPLETED' && task.status !== 'PUBLISHED' && (
               <p className={cn('text-xs', days < 0 ? 'text-destructive' : days <= 1 ? 'text-amber-500' : 'text-muted-foreground')}>
                 {days < 0
                   ? t('daysOverdue', { days: Math.abs(days) })
@@ -128,35 +150,80 @@ export default function TasksPage() {
         </div>
       ),
     },
-    ...(isAdmin
+    ...(isModeratorOrAdmin
       ? [
           {
             key: 'actions',
             header: '',
             className: 'w-24',
-            cell: (t: Task) => (
+            cell: (task: Task) => (
               <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  title={tCommon('edit')}
-                  onClick={() => {
-                    setEditTask(t);
-                    setFormOpen(true);
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 hover:text-destructive"
-                  title={tCommon('delete')}
-                  onClick={() => setDeleteTarget(t)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {(task.requiresPublishing || task.status === 'WAITING_FOR_PUBLISHING') && task.status !== 'PUBLISHED' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                    title={tCommon('publish') || 'Publish'}
+                    disabled={taskAction.isPending}
+                    onClick={async () => {
+                      try {
+                        await taskAction.mutateAsync({ id: task.id, action: 'publish' });
+                        toast.success('Task published successfully');
+                      } catch (err) {
+                        toast.error(errorMessage(err, 'Failed to publish task'));
+                      }
+                    }}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <>
+                    {task.planTask && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                        title={t('removeFromPlan')}
+                        disabled={removePlanTask.isPending}
+                        onClick={async () => {
+                          try {
+                            await removePlanTask.mutateAsync({
+                              planId: task.planTask!.planId,
+                              planTaskId: task.planTask!.id,
+                            });
+                            toast.success(t('removedFromPlan'));
+                          } catch (err) {
+                            toast.error(errorMessage(err, t('removeFromPlanFailed')));
+                          }
+                        }}
+                      >
+                        <Link2Off className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title={tCommon('edit')}
+                      onClick={() => {
+                        setEditTask(task);
+                        setFormOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:text-destructive"
+                      title={task.planTask ? t('deleteTaskAndPlan') : tCommon('delete')}
+                      onClick={() => setDeleteTarget(task)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
               </div>
             ),
           } satisfies Column<Task>,
@@ -174,14 +241,46 @@ export default function TasksPage() {
           </p>
         </div>
         {isAdmin && (
-          <Button
-            onClick={() => {
-              setEditTask(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4" /> {t('newTask')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedKeys.size > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setBulkMode('selected');
+                  setBulkConfirmOpen(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Delete Selected ({selectedKeys.size})
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive"
+              onClick={() => {
+                setBulkMode('completed');
+                setBulkConfirmOpen(true);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Clear All Completed
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setBulkMode('all');
+                setBulkConfirmOpen(true);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> {t('deleteAllTasks')}
+            </Button>
+            <Button
+              onClick={() => {
+                setEditTask(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" /> {t('newTask')}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -259,6 +358,9 @@ export default function TasksPage() {
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSort={onSort}
+        selectable={isAdmin}
+        selectedKeys={selectedKeys}
+        onSelectionChange={setSelectedKeys}
       />
 
       <Pagination
@@ -274,7 +376,11 @@ export default function TasksPage() {
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         title={t('deleteTitle')}
-        description={t('deleteDescription', { title: deleteTarget?.title ?? '' })}
+        description={
+          deleteTarget?.planTask
+            ? t('deleteTaskAndPlanDescription', { title: deleteTarget.title })
+            : t('deleteDescription', { title: deleteTarget?.title ?? '' })
+        }
         confirmLabel={t('deleteConfirm')}
         destructive
         loading={deleteTask.isPending}
@@ -286,6 +392,38 @@ export default function TasksPage() {
             setDeleteTarget(null);
           } catch (err) {
             toast.error(errorMessage(err, 'Failed to delete task'));
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onOpenChange={setBulkConfirmOpen}
+        title="Confirm Bulk Delete"
+        description={
+          bulkMode === 'completed'
+            ? 'Are you sure you want to delete ALL completed tasks? Their statistics will be permanently archived.'
+            : bulkMode === 'all'
+              ? t('deleteAllTasksDescription')
+            : `Are you sure you want to delete ${selectedKeys.size} selected tasks? Their statistics will be permanently archived.`
+        }
+        confirmLabel="Delete Tasks"
+        destructive
+        loading={bulkDelete.isPending}
+        onConfirm={async () => {
+          try {
+            await bulkDelete.mutateAsync(
+              bulkMode === 'completed'
+                ? { allCompleted: true }
+                : bulkMode === 'all'
+                  ? { all: true }
+                  : { ids: Array.from(selectedKeys) }
+            );
+            toast.success('Tasks successfully deleted and archived.');
+            setSelectedKeys(new Set());
+            setBulkConfirmOpen(false);
+          } catch (err) {
+            toast.error(errorMessage(err, 'Failed to delete tasks'));
           }
         }}
       />

@@ -14,9 +14,12 @@ import {
   LayoutList,
   Table as TableIcon,
   Trash2,
+  Pencil,
+  Link2Off,
 } from 'lucide-react';
 import { TaskStatusBadge, PriorityBadge } from './task-status-badge';
 import { TaskDetailSheet } from './task-detail-sheet';
+import { TaskFormDialog } from '@/components/tasks/task-form-dialog';
 import type { PlanTask, Task } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -26,7 +29,9 @@ interface AssignedTasksListProps {
   tasks: PlanTask[];
   canEdit: boolean;
   currentMonth: Date;
-  onRemove: (index: number) => void;
+  onRemoveFromPlan: (planTaskId: string) => void;
+  onRemoveTaskAndPlan: (planTaskId: string) => void;
+  isRemoving?: boolean;
   locale: string;
 }
 
@@ -34,14 +39,19 @@ export function AssignedTasksList({
   tasks,
   canEdit,
   currentMonth,
-  onRemove,
+  onRemoveFromPlan,
+  onRemoveTaskAndPlan,
+  isRemoving = false,
   locale,
 }: AssignedTasksListProps) {
   const t = useTranslations('Plans');
   const tCommon = useTranslations('Common');
+  const tDetail = useTranslations('TaskDetail');
   const router = useRouter();
   const [selectedPlanTask, setSelectedPlanTask] = useState<PlanTask | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [filterScope, setFilterScope] = useState<'month' | 'all'>('month');
   const [page, setPage] = useState(1);
@@ -182,18 +192,17 @@ export function AssignedTasksList({
           <table className="w-full text-left text-sm rtl:text-right">
             <thead>
               <tr className="border-b bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground font-bold">
-                <th className="px-4 py-3.5">Date</th>
+                <th className="px-4 py-3.5">{t('taskDate')}</th>
                 <th className="px-4 py-3.5">Task Title</th>
-                <th className="px-4 py-3.5">Status</th>
-                <th className="px-4 py-3.5">Priority</th>
-                <th className="px-4 py-3.5">Assignee</th>
-                <th className="px-4 py-3.5 text-right rtl:text-left">Actions</th>
+                <th className="px-4 py-3.5">{tCommon('status', { defaultValue: 'Status' })}</th>
+                <th className="px-4 py-3.5">{tCommon('priority', { defaultValue: 'Priority' })}</th>
+                <th className="px-4 py-3.5">{tDetail('assignee')}</th>
+                <th className="px-4 py-3.5 text-right rtl:text-left">{tCommon('actions', { defaultValue: 'Actions' })}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {paginatedTasks.map((planTask, index) => {
                 const task = planTask.task as Task | undefined;
-                const originalIndex = tasks.findIndex((t) => t.id === planTask.id);
                 return (
                   <tr
                     key={(planTask.id as string) || index}
@@ -264,15 +273,40 @@ export function AssignedTasksList({
                             <ExternalLink className="h-4 w-4" />
                           </button>
                         )}
-                        {canEdit && (
+                        {task && (
                           <button
                             type="button"
-                            onClick={() => onRemove(originalIndex >= 0 ? originalIndex : index)}
-                            className="rounded-lg p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
-                            title={tCommon('delete')}
+                            onClick={() => {
+                              setEditingTask(task);
+                              setEditDialogOpen(true);
+                            }}
+                            className="rounded-lg p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                            title={tCommon('edit')}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Pencil className="h-4 w-4" />
                           </button>
+                        )}
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isRemoving}
+                              onClick={() => onRemoveFromPlan(planTask.id)}
+                              className="rounded-lg p-1 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              title={t('removeFromPlan')}
+                            >
+                              <Link2Off className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isRemoving}
+                              onClick={() => onRemoveTaskAndPlan(planTask.id)}
+                              className="rounded-lg p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              title={t('removeTaskAndPlan')}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -295,7 +329,6 @@ export function AssignedTasksList({
         >
           {paginatedTasks.map((planTask, index) => {
             const task = planTask.task as Task | undefined;
-            const originalIndex = tasks.findIndex((t) => t.id === planTask.id);
             return (
               <motion.div
                 variants={{
@@ -309,18 +342,45 @@ export function AssignedTasksList({
                   setSheetOpen(true);
                 }}
               >
-                {/* Remove button */}
-                {canEdit && (
+                {/* Action buttons */}
+                {task && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onRemove(originalIndex >= 0 ? originalIndex : index);
+                      setEditingTask(task);
+                      setEditDialogOpen(true);
                     }}
-                    className="absolute -right-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-xs transition-all hover:scale-110 group-hover:opacity-100 cursor-pointer"
-                    title={tCommon('delete')}
+                    className="absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-xs transition-all hover:scale-110 group-hover:opacity-100 cursor-pointer"
+                    title={tCommon('edit')}
                   >
-                    <X className="h-3 w-3" />
+                    <Pencil className="h-3 w-3" />
                   </button>
+                )}
+                {canEdit && (
+                  <div className="absolute -right-2 -top-2 z-10 flex gap-1 opacity-0 transition-all group-hover:opacity-100">
+                    <button
+                      disabled={isRemoving}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveFromPlan(planTask.id);
+                      }}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white shadow-xs transition-all hover:scale-110 cursor-pointer disabled:cursor-not-allowed"
+                      title={t('removeFromPlan')}
+                    >
+                      <Link2Off className="h-3 w-3" />
+                    </button>
+                    <button
+                      disabled={isRemoving}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveTaskAndPlan(planTask.id);
+                      }}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-xs transition-all hover:scale-110 cursor-pointer disabled:cursor-not-allowed"
+                      title={t('removeTaskAndPlan')}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 )}
 
                 <div className="flex items-start gap-3">
@@ -374,6 +434,16 @@ export function AssignedTasksList({
         planTask={selectedPlanTask}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
+      />
+
+      <TaskFormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        task={editingTask}
+        onSuccess={() => {
+          setEditDialogOpen(false);
+          setEditingTask(null);
+        }}
       />
     </>
   );

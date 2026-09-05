@@ -20,8 +20,23 @@ export const changePasswordSchema = z
   });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
-const taskStatusEnum = z.enum(['TODO', 'IN_PROGRESS', 'TESTING', 'COMPLETED', 'RETURNED']);
+const taskStatusEnum = z.enum(['DRAFT', 'PENDING', 'TODO', 'IN_PROGRESS', 'TESTING', 'WAITING_FOR_REVIEW', 'WAITING_FOR_PUBLISHING', 'COMPLETED', 'RETURNED', 'PUBLISHED', 'REJECTED', 'CANCELLED']);
 const priorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+const roleEnum = z.enum(['ADMIN', 'MODERATOR', 'EMPLOYEE']);
+
+export const nextTaskDefinitionSchema: z.ZodType<import('./types').NextTaskDefinition> = z.lazy(() =>
+  z.object({
+    title: z.string().min(1, 'Title is required').max(200),
+    description: z.string().optional(),
+    assigneeId: z.string().optional(),
+    assigneeRole: roleEnum.optional(),
+    dueDays: z.coerce.number().optional(),
+    priority: priorityEnum.optional(),
+    requiresPublishing: z.boolean().optional(),
+    condition: z.enum(['ON_SUCCESS', 'ON_RETURN']).optional(),
+    nextTasks: z.array(nextTaskDefinitionSchema).optional(),
+  }),
+);
 
 export const createTaskSchema = z
   .object({
@@ -33,6 +48,18 @@ export const createTaskSchema = z
     assignedToId: z.string().optional(),
     attachmentLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
     estimatedHours: z.number().min(0).optional(),
+
+    isAutomated: z.boolean().optional(),
+    triggerStatus: taskStatusEnum.optional(),
+    nextTaskTitle: z.string().optional(),
+    nextTaskDescription: z.string().optional(),
+    nextTaskAssigneeId: z.string().optional(),
+    nextTaskAssigneeRole: roleEnum.optional(),
+    nextTaskDueDays: z.coerce.number().optional(),
+    nextTaskPriority: priorityEnum.optional(),
+    requiresPublishing: z.boolean().optional(),
+    nextTasks: z.array(nextTaskDefinitionSchema).optional(),
+
   })
   .refine((v) => v.assignmentMode !== 'MANUAL' || !!v.assignedToId, {
     path: ['assignedToId'],
@@ -51,6 +78,18 @@ export const updateTaskSchema = z.object({
   estimatedHours: z.coerce.number().min(0).optional(),
   actualHours: z.coerce.number().min(0).optional(),
   progress: z.coerce.number().int().min(0).max(100).optional(),
+
+    isAutomated: z.boolean().optional(),
+    triggerStatus: taskStatusEnum.optional(),
+    nextTaskTitle: z.string().optional(),
+    nextTaskDescription: z.string().optional(),
+    nextTaskAssigneeId: z.string().optional(),
+    nextTaskAssigneeRole: roleEnum.optional(),
+    nextTaskDueDays: z.coerce.number().optional(),
+    nextTaskPriority: priorityEnum.optional(),
+    requiresPublishing: z.boolean().optional(),
+    nextTasks: z.array(nextTaskDefinitionSchema).optional(),
+
 });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
@@ -68,6 +107,16 @@ export const planTaskSchema = z.object({
   isReady: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
   taskId: z.string().uuid().optional(),
+
+  isAutomated: z.boolean().optional(),
+  nextTaskTitle: z.string().optional(),
+  nextTaskDescription: z.string().optional(),
+  nextTaskAssigneeId: z.string().optional(),
+  nextTaskAssigneeRole: roleEnum.optional(),
+  nextTaskDueDays: z.coerce.number().optional(),
+  nextTaskPriority: priorityEnum.optional(),
+  requiresPublishing: z.boolean().optional(),
+  nextTasks: z.array(nextTaskDefinitionSchema).optional(),
 });
 
 export const createPlanSchema = z.object({
@@ -98,7 +147,6 @@ export const returnTaskSchema = z.object({
 });
 export type ReturnTaskInput = z.infer<typeof returnTaskSchema>;
 
-const roleEnum = z.enum(['ADMIN', 'MODERATOR', 'EMPLOYEE']);
 
 export const createUserSchema = z.object({
   name: z.string().min(1, 'Name is required'),

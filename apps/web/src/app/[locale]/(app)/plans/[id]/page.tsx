@@ -11,8 +11,18 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
+  ListX,
 } from 'lucide-react';
-import { usePlan, useUpdatePlan, useDeletePlan, usePlanAction, useBulkUpsertPlanTasks } from '@/lib/hooks';
+import {
+  usePlan,
+  useUpdatePlan,
+  useDeletePlan,
+  usePlanAction,
+  useBulkUpsertPlanTasks,
+  useRemoveAllPlanTasks,
+  useRemovePlanTask,
+  useRemovePlanTaskAndTask,
+} from '@/lib/hooks';
 import type { Task } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -48,6 +58,9 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   const { mutateAsync: deletePlan, isPending: isDeleting } = useDeletePlan();
   const { mutateAsync: planAction, isPending: isActioning } = usePlanAction();
   const { mutateAsync: upsertTasks, isPending: isSavingTasks } = useBulkUpsertPlanTasks(id);
+  const { mutateAsync: removeAllPlanTasks, isPending: isRemovingAll } = useRemoveAllPlanTasks(id);
+  const { mutateAsync: removePlanTask, isPending: isRemovingPlanTask } = useRemovePlanTask(id);
+  const { mutateAsync: removePlanTaskAndTask, isPending: isRemovingTaskAndPlan } = useRemovePlanTaskAndTask(id);
 
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState('');
@@ -99,9 +112,9 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const canEdit =
-    (isAdmin || user?.role === 'EMPLOYEE' || isModerator) &&
-    (plan.status === 'DRAFT' || plan.status === 'RETURNED');
+  const canEditPlanInfo = isAdmin && (plan.status === 'DRAFT' || plan.status === 'RETURNED');
+
+  const canEditTasks = isAdmin && (plan.status === 'DRAFT' || plan.status === 'RETURNED' || plan.status === 'PUBLISHED');
 
   const completedCount = tasks.filter((t) => (t.task as Task)?.status === 'COMPLETED').length;
   const totalCount = tasks.length;
@@ -142,12 +155,19 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const removeTask = (index: number) => {
-    setTasks((prev) => {
-      const next = [...prev];
-      next.splice(index, 1);
-      return next;
-    });
+  const removeTaskFromPlan = async (planTaskId: string) => {
+    if (!confirm(t('confirmRemoveFromPlan'))) return;
+    await removePlanTask(planTaskId);
+  };
+
+  const removeTaskAndPlan = async (planTaskId: string) => {
+    if (!confirm(t('confirmRemoveTaskAndPlan'))) return;
+    await removePlanTaskAndTask(planTaskId);
+  };
+
+  const removeAllTasksFromPlan = async () => {
+    if (!confirm(t('confirmRemoveAllFromPlan', { count: tasks.length }))) return;
+    await removeAllPlanTasks();
   };
 
   const handleAddTaskOnDate = (date: Date) => {
@@ -170,6 +190,15 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
       isReady: false,
       taskId: task.id,
       task,
+      isAutomated: false,
+      requiresPublishing: false,
+      nextTaskTitle: null,
+      nextTaskDescription: null,
+      nextTaskAssigneeId: null,
+      nextTaskAssigneeRole: null,
+      nextTaskDueDays: null,
+      nextTaskPriority: null,
+      nextTasks: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -285,7 +314,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* Right: actions */}
           <div className="flex flex-wrap items-center gap-2">
-            {canEdit && !isEditing && (
+            {canEditPlanInfo && !isEditing && (
               <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
                 {tCommon('edit')}
               </Button>
@@ -316,9 +345,28 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
-            {canEdit && (
+            {isAdmin && canEditPlanInfo && (
               <Button
                 size="sm"
+                className="gap-2"
+                disabled={isActioning}
+                onClick={() => {
+                  if (totalCount === 0) {
+                    alert(t('noTasksToSend'));
+                    return;
+                  }
+                  if (!confirm(t('confirmSend'))) return;
+                  planAction({ id, action: 'send' });
+                }}
+              >
+                <Send className="h-4 w-4" />
+                {t('sendTasks')}
+              </Button>
+            )}
+            {isAdmin && canEditPlanInfo && (
+              <Button
+                size="sm"
+                variant="outline"
                 className="gap-2"
                 disabled={isActioning}
                 onClick={() => {
@@ -370,11 +418,23 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
               </span>
               <span className="text-xs font-normal text-muted-foreground">{tCommon('completed', { defaultValue: 'completed' })}</span>
             </div>
-            {canEdit && (
-              <Button onClick={handleSaveTasks} disabled={isSavingTasks} size="sm" variant="outline" className="gap-2">
-                <Save className="h-3.5 w-3.5" />
-                {tCommon('save')}
-              </Button>
+            {canEditTasks && (
+              <>
+                <Button
+                  onClick={removeAllTasksFromPlan}
+                  disabled={tasks.length === 0 || isRemovingAll}
+                  size="sm"
+                  variant="destructive"
+                  className="gap-2"
+                >
+                  <ListX className="h-3.5 w-3.5" />
+                  {t('removeAllFromPlan')}
+                </Button>
+                <Button onClick={handleSaveTasks} disabled={isSavingTasks} size="sm" variant="outline" className="gap-2">
+                  <Save className="h-3.5 w-3.5" />
+                  {tCommon('save')}
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -385,7 +445,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
           <PlanCalendar
             tasks={tasks}
             isLoading={false}
-            canEdit={canEdit}
+            canEdit={canEditTasks}
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
             onAddTask={handleAddTaskOnDate}
@@ -398,9 +458,11 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
             </h3>
             <AssignedTasksList
               tasks={tasks}
-              canEdit={canEdit}
+              canEdit={canEditTasks}
               currentMonth={currentMonth}
-              onRemove={removeTask}
+              onRemoveFromPlan={removeTaskFromPlan}
+              onRemoveTaskAndPlan={removeTaskAndPlan}
+              isRemoving={isRemovingPlanTask || isRemovingTaskAndPlan}
               locale={locale}
             />
           </div>

@@ -65,8 +65,8 @@ describe('BalancedAssignmentStrategy', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           OR: [
-            { status: { not: 'COMPLETED' } },
-            { status: 'COMPLETED', updatedAt: { gte: expect.any(Date) } },
+            { status: { notIn: ['COMPLETED', 'PUBLISHED', 'REJECTED', 'CANCELLED'] } },
+            { status: { in: ['COMPLETED', 'PUBLISHED'] }, updatedAt: { gte: expect.any(Date) } },
           ],
         }),
       }),
@@ -75,6 +75,6 @@ describe('BalancedAssignmentStrategy', () => {
 
   it('throws when no active employees exist', async () => {
     const { tx } = makeTx([], []);
-    await expect(strategy.resolveAssignee(tx)).rejects.toThrow('No active employees');
+    await expect(strategy.resolveAssignee(tx)).rejects.toThrow('No active EMPLOYEE');
   });
 });

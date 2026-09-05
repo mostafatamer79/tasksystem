@@ -19,6 +19,11 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; className: string; dot:
     className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
     dot: 'bg-amber-500',
   },
+  WAITING_FOR_PUBLISHING: {
+    label: 'Waiting for Publishing',
+    className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+    dot: 'bg-purple-500',
+  },
   COMPLETED: {
     label: 'Completed',
     className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
@@ -51,18 +56,18 @@ interface TaskStatusBadgeProps {
 }
 
 export function TaskStatusBadge({ status, size = 'md', showDot = true, className }: TaskStatusBadgeProps) {
-  const config = STATUS_CONFIG[status];
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.TODO;
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border font-semibold',
         size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs',
-        config.className,
+        config?.className,
         className
       )}
     >
-      {showDot && <span className={cn('h-1.5 w-1.5 rounded-full', config.dot)} />}
-      {config.label}
+      {showDot && <span className={cn('h-1.5 w-1.5 rounded-full', config?.dot)} />}
+      {config?.label || status}
     </span>
   );
 }
@@ -74,17 +79,17 @@ interface PriorityBadgeProps {
 }
 
 export function PriorityBadge({ priority, size = 'md', className }: PriorityBadgeProps) {
-  const config = PRIORITY_CONFIG[priority];
+  const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.LOW;
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-full border font-semibold uppercase tracking-wider',
         size === 'sm' ? 'px-2 py-0.5 text-[9px]' : 'px-2.5 py-0.5 text-[10px]',
-        config.className,
+        config?.className,
         className
       )}
     >
-      {config.label}
+      {config?.label || priority}
     </span>
   );
 }

@@ -162,7 +162,7 @@ export default function BoardPage() {
   const isModeratorOrAdmin = isAdmin || isModerator;
 
   const [limit, setLimit] = useState(100);
-  const tasksQuery = useTasks({ limit, sortBy: 'createdAt', sortOrder: 'desc' }, !isModeratorOrAdmin);
+  const tasksQuery = useTasks({ limit, sortBy: 'dueDate', sortOrder: 'asc' }, !isModeratorOrAdmin);
   const taskAction = useTaskAction();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 

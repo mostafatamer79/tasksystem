@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/routing';
 import { useLocale, useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,13 +15,21 @@ import {
   RotateCcw,
   ShieldCheck,
   Lock,
+  Workflow,
+  ArrowRight,
+  Circle,
+  PlayCircle,
+  FlaskConical,
+  Globe2,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { TaskStatusBadge, PriorityBadge } from './task-status-badge';
-import type { Task, PlanTask } from '@/lib/types';
+import { TaskStatusBadge, PriorityBadge, STATUS_CONFIG } from './task-status-badge';
+import type { Task, PlanTask, TaskStatus } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
-import { useTaskAction } from '@/lib/hooks';
+import { useTaskAction, useTaskFlow } from '@/lib/hooks';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface TaskDetailSheetProps {
   planTask: PlanTask | null;
@@ -29,15 +37,148 @@ interface TaskDetailSheetProps {
   onClose: () => void;
 }
 
+const STATUS_ICON: Record<TaskStatus, React.ElementType> = {
+  TODO: Circle,
+  IN_PROGRESS: PlayCircle,
+  TESTING: FlaskConical,
+  WAITING_FOR_PUBLISHING: Globe2,
+  COMPLETED: CheckCircle2,
+  RETURNED: RotateCcw,
+  PUBLISHED: Globe2,
+};
+
+function statusGlow(status: TaskStatus) {
+  const map: Record<TaskStatus, string> = {
+    TODO: 'shadow-slate-500/20',
+    IN_PROGRESS: 'shadow-blue-500/30',
+    TESTING: 'shadow-amber-500/30',
+    WAITING_FOR_PUBLISHING: 'shadow-purple-500/30',
+    COMPLETED: 'shadow-emerald-500/30',
+    RETURNED: 'shadow-red-500/30',
+    PUBLISHED: 'shadow-purple-500/30',
+  };
+  return map[status];
+}
+
+function TimelineNode({
+  status,
+  isCurrent,
+  isLast,
+}: {
+  status: TaskStatus;
+  isCurrent: boolean;
+  isLast: boolean;
+}) {
+  const Icon = STATUS_ICON[status];
+  const dotClass = STATUS_CONFIG[status].dot;
+
+  return (
+    <div className="relative z-10 flex flex-col items-center">
+      <motion.div
+        initial={false}
+        animate={isCurrent ? { scale: [1, 1.15, 1] } : {}}
+        transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+        className={cn(
+          'flex h-9 w-9 items-center justify-center rounded-full border-2 bg-background shadow-sm transition-all',
+          isCurrent && ['ring-4 ring-primary/15', statusGlow(status)],
+          isLast && !isCurrent && 'opacity-80'
+        )}
+        style={{ borderColor: isCurrent ? 'hsl(var(--primary))' : undefined }}
+      >
+        <Icon className={cn('h-4 w-4', dotClass)} />
+      </motion.div>
+    </div>
+  );
+}
+
+function TimelineCard({
+  flowTask,
+  isCurrent,
+  onClick,
+  t,
+}: {
+  flowTask: Task;
+  isCurrent: boolean;
+  onClick: () => void;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  const statusConfig = STATUS_CONFIG[flowTask.status];
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ y: -2, scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      className={cn(
+        'group relative flex-1 rounded-2xl border p-4 text-left transition-all duration-300',
+        'hover:shadow-lg hover:shadow-primary/5',
+        isCurrent
+          ? 'bg-gradient-to-br from-primary/8 via-primary/4 to-transparent border-primary/30 ring-1 ring-primary/20'
+          : 'bg-card border-border/80 hover:border-primary/25'
+      )}
+    >
+      {/* Status-colored accent line */}
+      <div
+        className={cn(
+          'absolute top-4 bottom-4 w-1 rounded-full opacity-60 transition-all group-hover:opacity-100',
+          'rtl:right-4 ltr:left-4',
+          statusConfig.dot.replace('bg-', 'bg-')
+        )}
+      />
+
+      <div className={cn('space-y-2', 'rtl:pr-5 ltr:pl-5')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className={cn('text-sm font-semibold text-foreground leading-snug', isCurrent && 'text-primary')}>
+              {flowTask.title}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {flowTask.assignedTo?.name || t('unassigned')}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {flowTask.dueDate
+                  ? new Date(flowTask.dueDate).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  : t('noDueDate')}
+              </span>
+            </div>
+          </div>
+          <TaskStatusBadge status={flowTask.status} size="sm" />
+        </div>
+
+        {isCurrent && (
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+            <Sparkles className="h-3 w-3" />
+            {t('currentStep')}
+          </div>
+        )}
+      </div>
+
+      {/* Hover tooltip hint */}
+      <div className="pointer-events-none absolute inset-0 rounded-2xl bg-primary/5 opacity-0 transition-opacity group-hover:opacity-100" />
+    </motion.button>
+  );
+}
+
 export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProps) {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations('Plans');
+  const td = useTranslations('TaskDetail');
+  const common = useTranslations('Common');
   const user = useAuthStore((s) => s.user);
   const taskAction = useTaskAction();
-
   const isModeratorOrAdmin = user?.role === 'MODERATOR' || user?.role === 'ADMIN';
   const task = planTask?.task as Task | undefined;
+  const flowQuery = useTaskFlow(task?.id ?? '', open);
+
+  const isRtl = locale === 'ar';
 
   // Close on Escape key
   useEffect(() => {
@@ -53,15 +194,40 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
       ? new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-US', { dateStyle: 'medium' }).format(new Date(d))
       : '—';
 
-  const handleModeratorAction = async (action: 'approve' | 'return' | 'publish', note?: string) => {
+  const [progressInput, setProgressInput] = useState<number>(task?.progress ?? 0);
+
+  useEffect(() => {
+    setProgressInput(task?.progress ?? 0);
+  }, [task?.progress]);
+
+  const isTaskOwner = task?.assignedToId === user?.id;
+
+  const handleAction = async (action: 'start' | 'submit-testing' | 'approve' | 'return' | 'publish' | 'progress', note?: string, progress?: number) => {
     if (!task) return;
     try {
-      await taskAction.mutateAsync({ id: task.id, action, note });
-      toast.success(action === 'return' ? 'Task returned for rework' : 'Task Published / Approved');
-    } catch (_err) {
-      toast.error('Failed to update task status');
+      await taskAction.mutateAsync({ id: task.id, action, note, progress });
+      const messages: Record<string, string> = {
+        start: td('workStarted'),
+        'submit-testing': td('submittedForTesting'),
+        approve: td('taskApproved'),
+        return: td('taskReturned'),
+        publish: td('taskApproved'),
+        progress: td('progressUpdated'),
+      };
+      toast.success(messages[action] || td('taskApproved'));
+    } catch {
+      toast.error(common('error'));
     }
   };
+
+  const flowTasks = useMemo(() => {
+    if (!flowQuery.data) return [];
+    return flowQuery.data.map((ft, idx) => ({
+      ...ft,
+      stepPosition:
+        ft.id === task?.id ? 'current' : idx < (flowQuery.data?.findIndex((f) => f.id === task?.id) ?? 0) ? 'past' : 'pending',
+    }));
+  }, [flowQuery.data, task?.id]);
 
   return (
     <AnimatePresence>
@@ -81,11 +247,14 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
           {/* Sheet */}
           <motion.div
             key="sheet"
-            initial={{ x: '100%', opacity: 0 }}
+            initial={{ x: isRtl ? '-100%' : '100%', opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '100%', opacity: 0 }}
+            exit={{ x: isRtl ? '-100%' : '100%', opacity: 0 }}
             transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-            className="fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l bg-background shadow-2xl flex flex-col"
+            className={cn(
+              'fixed top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l bg-background shadow-2xl flex flex-col',
+              isRtl ? 'left-0 border-r border-l-0' : 'right-0 border-l'
+            )}
           >
             {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-6 py-4 backdrop-blur-sm">
@@ -140,65 +309,115 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
                     )}
                   </div>
 
-                  {/* Moderator Status Management - Only appears when task is COMPLETED or TESTING */}
-                  {isModeratorOrAdmin && (task.status === 'COMPLETED' || task.status === 'TESTING') ? (
+                  {/* Task Actions */}
+                  {task && (
                     <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                       <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
                         <ShieldCheck className="h-4 w-4" />
-                        <span>{t('moderatorControlTitle')}</span>
+                        <span>{isModeratorOrAdmin ? t('moderatorControlTitle') : td('actions')}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {t('moderatorControlDesc')}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
+
+                      {/* Employee actions */}
+                      {(isTaskOwner || isModeratorOrAdmin) && (task.status === 'TODO' || task.status === 'RETURNED') && (
                         <Button
                           size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 text-xs cursor-pointer"
+                          className="bg-blue-600 hover:bg-blue-700 gap-1.5 text-xs cursor-pointer"
                           disabled={taskAction.isPending}
-                          onClick={() => handleModeratorAction(task.status === 'COMPLETED' ? 'publish' : 'approve')}
+                          onClick={() => handleAction('start')}
                         >
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          {t('publishTask')}
+                          <PlayCircle className="h-3.5 w-3.5" />
+                          {td('startWork')}
                         </Button>
-                        {task.status === 'TESTING' && (
+                      )}
+
+                      {(isTaskOwner || isModeratorOrAdmin) && task.status === 'IN_PROGRESS' && (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-amber-600 hover:bg-amber-700 gap-1.5 text-xs cursor-pointer"
+                              disabled={taskAction.isPending}
+                              onClick={() => handleAction('submit-testing')}
+                            >
+                              <FlaskConical className="h-3.5 w-3.5" />
+                              {td('submitForTesting')}
+                            </Button>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-medium">
+                              <span className="text-muted-foreground">{td('progress')}</span>
+                              <span>{progressInput}%</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={5}
+                                value={progressInput}
+                                onChange={(e) => setProgressInput(Number(e.target.value))}
+                                className="flex-1 h-2 rounded-lg bg-muted accent-primary appearance-none cursor-pointer"
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs cursor-pointer"
+                                disabled={taskAction.isPending || progressInput === task.progress}
+                                onClick={() => handleAction('progress', undefined, progressInput)}
+                              >
+                                {common('save')}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Moderator / Admin actions */}
+                      {isModeratorOrAdmin && (task.status === 'TESTING' || task.status === 'COMPLETED') && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {task.status === 'TESTING' && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 text-xs cursor-pointer"
+                              disabled={taskAction.isPending}
+                              onClick={() => handleAction('approve')}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {td('approve')}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 gap-1.5 text-xs cursor-pointer"
+                            disabled={taskAction.isPending}
+                            onClick={() => handleAction('publish')}
+                          >
+                            <Globe2 className="h-3.5 w-3.5" />
+                            {td('publishTask')}
+                          </Button>
                           <Button
                             size="sm"
                             variant="destructive"
                             className="gap-1.5 text-xs cursor-pointer"
                             disabled={taskAction.isPending}
                             onClick={() => {
-                              const note = prompt(t('returnNote') || 'Reason for returning task:');
-                              if (note !== null) handleModeratorAction('return', note);
+                              const note = prompt(t('returnNote') || td('returnReasonPlaceholder'));
+                              if (note !== null) handleAction('return', note);
                             }}
                           >
                             <RotateCcw className="h-3.5 w-3.5" />
-                            {t('returnTask')}
+                            {td('returnForRework')}
                           </Button>
-                        )}
-                      </div>
-                    </div>
-                  ) : !isModeratorOrAdmin && (task.status === 'COMPLETED' || task.status === 'TESTING') ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 font-medium">
-                      <Lock className="h-4 w-4 shrink-0" />
-                      <span>{t('taskCompletedLock')}</span>
-                    </div>
-                  ) : null}
+                        </div>
+                      )}
 
-                  {/* Progress */}
-                  {task.status === 'IN_PROGRESS' && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-medium">
-                        <span className="text-muted-foreground">Progress</span>
-                        <span>{task.progress}%</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full bg-blue-500"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${task.progress}%` }}
-                          transition={{ duration: 0.6, ease: 'easeOut' }}
-                        />
-                      </div>
+                      {/* Locked / no actions */}
+                      {!isModeratorOrAdmin && !isTaskOwner && (task.status === 'COMPLETED' || task.status === 'TESTING' || task.status === 'PUBLISHED') && (
+                        <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 font-medium">
+                          <Lock className="h-4 w-4 shrink-0" />
+                          <span>{t('taskCompletedLock')}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -206,7 +425,7 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
                   <div className="grid grid-cols-2 gap-3">
                     {/* Assigned To */}
                     <div className="rounded-xl border bg-card p-3 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned To</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{td('assignee')}</p>
                       <div className="flex items-center gap-2">
                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                           {task.assignedTo?.name?.[0]?.toUpperCase() || '?'}
@@ -217,7 +436,7 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
 
                     {/* Due Date */}
                     <div className="rounded-xl border bg-card p-3 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Due Date</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{td('dueDate')}</p>
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-sm font-medium">{fmt(task.dueDate)}</span>
@@ -227,7 +446,7 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
                     {/* Created By */}
                     {task.createdBy && (
                       <div className="rounded-xl border bg-card p-3 space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Created By</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{td('createdByLabel')}</p>
                         <div className="flex items-center gap-2">
                           <User className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-sm font-medium truncate">{task.createdBy.name}</span>
@@ -238,7 +457,7 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
                     {/* Estimated Hours */}
                     {task.estimatedHours != null && (
                       <div className="rounded-xl border bg-card p-3 space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Est. Hours</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{td('estHours')}</p>
                         <span className="text-sm font-medium">{task.estimatedHours}h</span>
                       </div>
                     )}
@@ -249,7 +468,7 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
               {/* Notes from plan task */}
               {planTask?.notes && (
                 <div className="rounded-xl border bg-amber-500/5 border-amber-500/20 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">Notes</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">{td('notes')}</p>
                   <p className="text-sm leading-relaxed text-foreground/80">{planTask.notes}</p>
                 </div>
               )}
@@ -257,8 +476,85 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
               {/* Content */}
               {planTask?.content && (
                 <div className="rounded-xl border bg-card p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Content</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">{td('content')}</p>
                   <p className="text-sm leading-relaxed text-foreground/80">{planTask.content}</p>
+                </div>
+              )}
+
+              {/* Task Flow Timeline */}
+              {task && (
+                <div className="rounded-2xl border bg-card p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      <Workflow className="h-4 w-4 text-primary" />
+                      <span>{td('taskFlowTitle')}</span>
+                    </div>
+                    {flowQuery.isLoading && (
+                      <span className="text-xs text-muted-foreground animate-pulse">{common('loading')}</span>
+                    )}
+                  </div>
+
+                  {flowQuery.isError && (
+                    <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
+                      {common('error')}
+                    </div>
+                  )}
+
+                  {flowTasks.length > 0 ? (
+                    <div className="relative">
+                      {/* Vertical connector line with gradient */}
+                      <div
+                        className={cn(
+                          'absolute top-4 bottom-4 w-0.5 rounded-full bg-gradient-to-b from-primary/40 via-border to-border',
+                          isRtl ? 'right-[17px]' : 'left-[17px]'
+                        )}
+                      />
+
+                      <div className="space-y-0">
+                        {flowTasks.map((flowTask, index) => {
+                          const isCurrent = flowTask.id === task.id;
+
+                          return (
+                            <motion.div
+                              key={flowTask.id}
+                              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.1, duration: 0.4, ease: 'easeOut' }}
+                              className={cn(
+                                'relative flex items-start gap-4',
+                                index !== flowTasks.length - 1 && 'pb-6'
+                              )}
+                            >
+                              <div className={cn('shrink-0', isRtl ? 'order-2' : 'order-1')}>
+                                <TimelineNode
+                                  status={flowTask.status}
+                                  isCurrent={isCurrent}
+                                  isLast={index === flowTasks.length - 1}
+                                />
+                              </div>
+
+                              <div className={cn('flex-1', isRtl ? 'order-1' : 'order-2')}>
+                                <TimelineCard
+                                  flowTask={flowTask}
+                                  isCurrent={isCurrent}
+                                  onClick={() => {
+                                    onClose();
+                                    router.push(`/tasks/${flowTask.id}`);
+                                  }}
+                                  t={td}
+                                />
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
+                      <ArrowRight className={cn('mx-auto mb-2 h-5 w-5 opacity-50', isRtl && 'rotate-180')} />
+                      <p>{td('noConnectedTasks')}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -273,8 +569,8 @@ export function TaskDetailSheet({ planTask, open, onClose }: TaskDetailSheetProp
                     router.push(`/tasks/${task.id}`);
                   }}
                 >
-                  View Full Task Details
-                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  {td('details')}
+                  <ChevronRight className={cn('h-4 w-4 transition-transform group-hover:translate-x-0.5', isRtl && 'rotate-180')} />
                 </Button>
               </div>
             )}

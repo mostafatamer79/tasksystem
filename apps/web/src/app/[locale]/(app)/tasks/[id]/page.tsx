@@ -20,6 +20,7 @@ import {
   Send,
   Timer,
   ShieldCheck,
+  BookOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
@@ -109,7 +110,7 @@ export default function TaskDetailPage() {
   const canProgress = isAssignee && tk.status === 'IN_PROGRESS';
   const hasActions =
     (isAssignee && (tk.status === 'TODO' || tk.status === 'RETURNED' || tk.status === 'IN_PROGRESS')) ||
-    (isModeratorOrAdmin && (tk.status === 'TESTING' || tk.status === 'COMPLETED'));
+    (isModeratorOrAdmin && (tk.status === 'TESTING' || tk.status === 'COMPLETED' || tk.status === 'WAITING_FOR_PUBLISHING' || (tk.requiresPublishing && tk.status !== 'PUBLISHED')));
 
   const runAction = async (action: 'start' | 'submit-testing' | 'approve' | 'publish', successKey: string) => {
     try {
@@ -140,6 +141,17 @@ export default function TaskDetailPage() {
           disabled={taskAction.isPending}
         >
           <FlaskConical className="h-3.5 w-3.5" /> {t('submitForTesting')}
+        </Button>
+      )}
+      {isModeratorOrAdmin && (tk.requiresPublishing || tk.status === 'WAITING_FOR_PUBLISHING') && tk.status !== 'PUBLISHED' && tk.status !== 'COMPLETED' && (
+        <Button
+          size="sm"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-xs cursor-pointer"
+          onClick={() => runAction('publish', 'taskApproved')}
+          disabled={taskAction.isPending}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {t('publishTask') || 'Publish Task'}
         </Button>
       )}
       {isModeratorOrAdmin && (tk.status === 'TESTING' || tk.status === 'COMPLETED') && (
@@ -191,6 +203,12 @@ export default function TaskDetailPage() {
                 {tk.assignmentMode === 'BALANCED' && (
                   <span className="rounded-full border border-violet-500/25 bg-violet-500/10 px-2.5 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
                     {t('autoAssigned')}
+                  </span>
+                )}
+                {tk.planTask?.plan && (
+                  <span className="flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700 shadow-sm dark:bg-blue-500/10 dark:text-blue-300">
+                    <BookOpen className="h-4 w-4" />
+                    {tk.planTask.plan.title}
                   </span>
                 )}
               </div>

@@ -1,3 +1,4 @@
+import { TasksModule } from '../tasks/tasks.module';
 import { Module } from '@nestjs/common';
 import { PlansController } from './plans.controller';
 import { PlansService } from './plans.service';
@@ -5,6 +6,7 @@ import { PlanRepository } from './plan.repository';
 import { PlanStateMachine } from './plan-state-machine';
 
 @Module({
+  imports: [TasksModule],
   controllers: [PlansController],
   providers: [PlansService, PlanRepository, PlanStateMachine],
 })

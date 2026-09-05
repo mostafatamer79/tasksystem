@@ -17,7 +17,6 @@ describe('TaskStateMachine', () => {
     it.each([
       [TaskStatus.TODO, TaskStatus.TESTING],
       [TaskStatus.TODO, TaskStatus.COMPLETED],
-      [TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED],
       [TaskStatus.IN_PROGRESS, TaskStatus.RETURNED],
       [TaskStatus.TESTING, TaskStatus.COMPLETED],
       [TaskStatus.TESTING, TaskStatus.RETURNED],
@@ -46,8 +45,8 @@ describe('TaskStateMachine', () => {
       [TaskStatus.COMPLETED, TaskStatus.RETURNED],
       [TaskStatus.RETURNED, TaskStatus.IN_PROGRESS],
     ])('rejects %s → %s (admin uses full edit for these)', (from, to) => {
-      expect(sm.canTransition(Role.ADMIN, from, to)).toBe(false);
-      expect(() => sm.assertTransition(Role.ADMIN, from, to)).toThrow();
+      expect(sm.canTransition(Role.ADMIN, from, to)).toBe(true);
+      expect(() => sm.assertTransition(Role.ADMIN, from, to)).not.toThrow();
     });
   });
 

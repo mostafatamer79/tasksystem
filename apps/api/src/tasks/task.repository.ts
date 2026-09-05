@@ -8,6 +8,7 @@ import { QueryTasksDto, UpdateTaskDto } from './dto/task.dto';
 export const taskInclude = {
   assignedTo: { select: { id: true, name: true, email: true, avatarUrl: true } },
   createdBy: { select: { id: true, name: true, email: true } },
+  planTask: { select: { id: true, planId: true, plan: { select: { id: true, title: true } } } },
 } satisfies Prisma.TaskInclude;
 
 @Injectable()
@@ -34,13 +35,28 @@ export class TaskRepository {
         : {}),
     };
     const allowedSort = ['title', 'createdAt', 'updatedAt', 'dueDate', 'priority', 'status'];
-    const sortBy = query.sortBy && allowedSort.includes(query.sortBy) ? query.sortBy : 'createdAt';
+    const sortBy = query.sortBy && allowedSort.includes(query.sortBy) ? query.sortBy : 'dueDate';
+    
+    let orderBy: Prisma.TaskOrderByWithRelationInput | Prisma.TaskOrderByWithRelationInput[] = { [sortBy]: query.sortOrder };
+    
+    if (sortBy === 'dueDate') {
+      orderBy = [
+        { dueDate: { sort: query.sortOrder ?? 'asc', nulls: 'last' } },
+        { priority: 'desc' }
+      ];
+    } else if (sortBy === 'priority') {
+      orderBy = [
+        { priority: query.sortOrder },
+        { dueDate: { sort: 'asc', nulls: 'last' } }
+      ];
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.task.findMany({
         where,
         skip: query.skip,
         take: query.limit,
-        orderBy: { [sortBy]: query.sortOrder },
+        orderBy,
         include: taskInclude,
       }),
       this.prisma.task.count({ where }),
@@ -62,7 +78,7 @@ export class TaskRepository {
   }
 
   update(id: string, data: UpdateTaskDto) {
-    return this.prisma.task.update({ where: { id }, data, include: taskInclude });
+    return this.prisma.task.update({ where: { id }, data: data as Prisma.TaskUncheckedUpdateInput, include: taskInclude });
   }
 
   async transitionInTx(

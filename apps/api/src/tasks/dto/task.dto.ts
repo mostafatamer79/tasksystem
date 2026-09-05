@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -10,9 +11,10 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AssignmentMode, Priority, TaskStatus } from '@prisma/client';
+import { AssignmentMode, Priority, Role, TaskStatus } from '@prisma/client';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class CreateTaskDto {
@@ -56,6 +58,103 @@ export class CreateTaskDto {
   @IsNumber()
   @Min(0)
   estimatedHours?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  isAutomated?: boolean;
+
+  @ApiPropertyOptional({ enum: TaskStatus })
+  @IsOptional()
+  @IsEnum(TaskStatus)
+  triggerStatus?: TaskStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskTitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskDescription?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  nextTaskAssigneeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskAssigneeRole?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  nextTaskDueDays?: number;
+
+  @ApiPropertyOptional({ enum: Priority })
+  @IsOptional()
+  @IsEnum(Priority)
+  nextTaskPriority?: Priority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  requiresPublishing?: boolean;
+
+  @ApiPropertyOptional({ description: 'Array of next-task definitions for parallel / conditional workflows' })
+  @IsOptional()
+  nextTasks?: NextTaskDefinitionDto[];
+
+}
+
+export class NextTaskDefinitionDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string;
+
+  @ApiPropertyOptional({ enum: Role })
+  @IsOptional()
+  @IsEnum(Role)
+  assigneeRole?: Role;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  dueDays?: number;
+
+  @ApiPropertyOptional({ enum: Priority })
+  @IsOptional()
+  @IsEnum(Priority)
+  priority?: Priority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  requiresPublishing?: boolean;
+
+  @ApiPropertyOptional({ enum: ['ON_SUCCESS', 'ON_RETURN'] })
+  @IsOptional()
+  @IsEnum(['ON_SUCCESS', 'ON_RETURN'] as const)
+  condition?: 'ON_SUCCESS' | 'ON_RETURN';
+
+  @ApiPropertyOptional({ type: () => [NextTaskDefinitionDto] })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => NextTaskDefinitionDto)
+  nextTasks?: NextTaskDefinitionDto[];
 }
 
 export class UpdateTaskDto {
@@ -114,6 +213,54 @@ export class UpdateTaskDto {
   @Min(0)
   @Max(100)
   progress?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  isAutomated?: boolean;
+
+  @ApiPropertyOptional({ enum: TaskStatus })
+  @IsOptional()
+  @IsEnum(TaskStatus)
+  triggerStatus?: TaskStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskTitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskDescription?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  nextTaskAssigneeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextTaskAssigneeRole?: any;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  nextTaskDueDays?: number;
+
+  @ApiPropertyOptional({ enum: Priority })
+  @IsOptional()
+  @IsEnum(Priority)
+  nextTaskPriority?: Priority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  requiresPublishing?: boolean;
+
+  @ApiPropertyOptional({ description: 'Array of next-task definitions for parallel / conditional workflows' })
+  @IsOptional()
+  nextTasks?: NextTaskDefinitionDto[];
+
 }
 
 export class UpdateProgressDto {

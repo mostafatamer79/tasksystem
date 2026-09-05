@@ -2,11 +2,11 @@
 
 export const ROLES = ['ADMIN', 'EMPLOYEE', 'MODERATOR'] as const;
 export type Role = (typeof ROLES)[number];
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'TESTING' | 'COMPLETED' | 'RETURNED' | 'PUBLISHED';
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'TESTING' | 'WAITING_FOR_PUBLISHING' | 'COMPLETED' | 'RETURNED' | 'PUBLISHED';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type AssignmentMode = 'MANUAL' | 'BALANCED';
 
-export const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'TESTING', 'COMPLETED', 'RETURNED', 'PUBLISHED'];
+export const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'TESTING', 'WAITING_FOR_PUBLISHING', 'COMPLETED', 'RETURNED', 'PUBLISHED'];
 export const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 export interface User {
@@ -44,10 +44,45 @@ export interface Task {
   actualHours: number | null;
   progress: number;
   assignmentMode: AssignmentMode;
+  isAutomated: boolean;
+  triggerStatus: TaskStatus | null;
+  nextTaskTitle: string | null;
+  nextTaskDescription: string | null;
+  nextTaskAssigneeId: string | null;
+  nextTaskAssigneeRole: Role | null;
+  nextTaskDueDays: number | null;
+  nextTaskPriority: Priority | null;
+  requiresPublishing: boolean;
+  nextTasks: NextTaskDefinition[] | null;
+  rootTaskId: string | null;
+  parentTaskId: string | null;
   createdAt: string;
   updatedAt: string;
   assignedTo?: TaskUserRef;
   createdBy?: TaskUserRef;
+  planTask?: { id: string; planId: string; plan: { id: string; title: string } };
+}
+
+export interface NextTaskDefinition {
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  assigneeRole?: Role;
+  dueDays?: number;
+  priority?: Priority;
+  requiresPublishing?: boolean;
+  condition?: 'ON_SUCCESS' | 'ON_RETURN';
+  nextTasks?: NextTaskDefinition[];
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  triggerStatus: 'COMPLETED' | 'TESTING' | 'PUBLISHED';
+  requiresPublishing: boolean;
+  nextTasks: NextTaskDefinition[];
 }
 
 export interface TaskHistoryEntry {
@@ -113,6 +148,15 @@ export interface PlanTask {
   isReady: boolean;
   taskId?: string | null;
   task?: Task;
+  isAutomated: boolean;
+  nextTaskTitle: string | null;
+  nextTaskDescription: string | null;
+  nextTaskAssigneeId: string | null;
+  nextTaskAssigneeRole: Role | null;
+  nextTaskDueDays: number | null;
+  nextTaskPriority: Priority | null;
+  requiresPublishing: boolean;
+  nextTasks: NextTaskDefinition[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -155,6 +199,7 @@ export interface AdminStats {
   completedTasks: number;
   testingTasks: number;
   returnedTasks: number;
+  publishedTasks: number;
   inProgressTasks: number;
   todoTasks: number;
   activeEmployees: number;
@@ -176,6 +221,7 @@ export interface EmployeeStats {
   testingTasks: number;
   completedTasks: number;
   returnedTasks: number;
+  publishedTasks: number;
   dueToday: number;
   overdue: number;
   averageProgress: number;
@@ -193,6 +239,7 @@ export interface EmployeeTaskStats {
   testingTasks: number;
   completedTasks: number;
   returnedTasks: number;
+  publishedTasks: number;
 }
 
 export interface LoginResponse {

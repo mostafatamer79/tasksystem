@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useLocale } from 'next-intl';
 import { format, isToday } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TaskDetailSheet } from './task-detail-sheet';
+import { TaskFormDialog } from '@/components/tasks/task-form-dialog';
 import type { PlanTask, Task } from '@/lib/types';
 
 const STATUS_DOT: Record<string, string> = {
@@ -38,6 +39,8 @@ export function CalendarDayCell({
   const [expanded, setExpanded] = useState(false);
   const [selectedPlanTask, setSelectedPlanTask] = useState<PlanTask | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const locale = useLocale();
   const dateLocale = locale === 'ar' ? ar : enUS;
 
@@ -104,29 +107,47 @@ export function CalendarDayCell({
             const linked = planTask.task as Task | undefined;
             const status = linked?.status ?? 'TODO';
             return (
-              <button
+              <div
                 key={planTask.id}
-                onClick={(e) => handleTaskClick(e, planTask)}
-                className="w-full text-left rounded-md border border-border/60 bg-background/90 px-2 py-1 transition-all hover:border-primary/40 hover:bg-background hover:shadow-xs group/item cursor-pointer"
+                className="flex items-center gap-1 rounded-md border border-border/60 bg-background/90 px-1.5 py-1 transition-all hover:border-primary/40 hover:bg-background hover:shadow-xs group/item cursor-pointer"
                 title={linked?.title || planTask.title}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5 shrink-0 rounded-full',
-                      STATUS_DOT[status] ?? 'bg-slate-400'
-                    )}
-                  />
-                  <span className="truncate text-[11px] font-medium leading-tight text-foreground/90 group-hover/item:text-primary transition-colors">
-                    {linked?.title || planTask.title}
-                  </span>
-                </div>
-                {linked?.assignedTo && (
-                  <div className="mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80 pl-3 truncate">
-                    <span>{linked.assignedTo.name}</span>
+                <button
+                  onClick={(e) => handleTaskClick(e, planTask)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        STATUS_DOT[status] ?? 'bg-slate-400'
+                      )}
+                    />
+                    <span className="truncate text-[11px] font-medium leading-tight text-foreground/90 group-hover/item:text-primary transition-colors">
+                      {linked?.title || planTask.title}
+                    </span>
                   </div>
+                  {linked?.assignedTo && (
+                    <div className="mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80 pl-3 truncate">
+                      <span>{linked.assignedTo.name}</span>
+                    </div>
+                  )}
+                </button>
+                {linked && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTask(linked);
+                      setEditDialogOpen(true);
+                    }}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground/60 hover:bg-primary/10 hover:text-primary opacity-0 group-hover/item:opacity-100 transition-opacity"
+                    title="Edit task"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
                 )}
-              </button>
+              </div>
             );
           })}
 
@@ -160,6 +181,16 @@ export function CalendarDayCell({
         planTask={selectedPlanTask}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
+      />
+
+      <TaskFormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        task={editingTask}
+        onSuccess={() => {
+          setEditDialogOpen(false);
+          setEditingTask(null);
+        }}
       />
     </>
   );

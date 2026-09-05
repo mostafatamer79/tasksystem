@@ -1,3 +1,4 @@
+import { WorkflowService } from '../workflow/workflow.service';
 import {
   ForbiddenException,
   Injectable,
@@ -32,6 +33,7 @@ export class TasksService {
     private readonly gateway: NotificationsGateway,
     manual: ManualAssignmentStrategy,
     balanced: BalancedAssignmentStrategy,
+    private readonly workflow: WorkflowService,
   ) {
     this.strategies = { [manual.mode]: manual, [balanced.mode]: balanced };
   }
@@ -55,7 +57,8 @@ export class TasksService {
         ...rest,
         assignedToId: resolvedAssignee,
         createdById: actor.id,
-      });
+        nextTasks: rest.nextTasks ? (rest.nextTasks as unknown as Prisma.InputJsonValue) : undefined,
+      } as Prisma.TaskUncheckedCreateInput);
       await Promise.all([
         tx.taskHistory.create({
           data: {
@@ -129,8 +132,62 @@ export class TasksService {
   async remove(id: string, actor: AuthUser) {
     const existing = await this.repo.findById(id, actor);
     if (!existing) throw new NotFoundException('Task not found');
-    await this.repo.remove(id);
-    this.audit.log({ userId: actor.id, action: 'TASK_DELETE', entity: 'Task', entityId: id });
+    await this.bulkDelete({ ids: [id] }, actor);
+  }
+
+  async bulkDelete(dto: { ids?: string[]; allCompleted?: boolean; all?: boolean }, actor: AuthUser) {
+    let tasks: Task[] = [];
+    if (dto.all) {
+      tasks = await this.prisma.task.findMany();
+    } else if (dto.allCompleted) {
+      tasks = await this.prisma.task.findMany({ where: { status: TaskStatus.COMPLETED } });
+    } else if (dto.ids?.length) {
+      tasks = await this.prisma.task.findMany({ where: { id: { in: dto.ids } } });
+    }
+    if (!tasks.length) return;
+
+    // Calculate aggregated stats
+    const statsUpdate = new Map<string, number>();
+    const inc = (k: string) => statsUpdate.set(k, (statsUpdate.get(k) ?? 0) + 1);
+
+    for (const t of tasks) {
+      inc('global_total');
+      inc(`global_status_${t.status}`);
+      inc(`global_priority_${t.priority}`);
+      inc(`user_${t.assignedToId}_total`);
+      inc(`user_${t.assignedToId}_status_${t.status}`);
+      if (t.status === TaskStatus.COMPLETED) {
+        const d = t.updatedAt;
+        inc(`month_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+    }
+
+    // Run transaction: update ArchivedStats and delete tasks
+    await this.prisma.$transaction(async (tx) => {
+      // Upsert stats
+      for (const [key, value] of statsUpdate.entries()) {
+        await tx.archivedStat.upsert({
+          where: { key },
+          update: { value: { increment: value } },
+          create: { key, value },
+        });
+      }
+      // Delete tasks
+      await tx.planTask.deleteMany({
+        where: { taskId: { in: tasks.map((task) => task.id) } },
+      });
+      await tx.task.deleteMany({
+        where: { id: { in: tasks.map(t => t.id) } },
+      });
+    });
+
+    this.audit.log({
+      userId: actor.id,
+      action: 'TASK_BULK_DELETE',
+      entity: 'Task',
+      entityId: 'bulk',
+      metadata: { deletedCount: tasks.length },
+    });
   }
 
   async updateProgress(id: string, progress: number, actor: AuthUser) {
@@ -153,7 +210,11 @@ export class TasksService {
   }
 
   /** Employee: IN_PROGRESS→TESTING. */
-  submitTesting(id: string, actor: AuthUser) {
+  async submitTesting(id: string, actor: AuthUser) {
+    const task = await this.getOwnedOrAdminTask(id, actor);
+    if (task.requiresPublishing) {
+      return this.transition(id, actor, TaskStatus.COMPLETED, 'TASK_APPROVED', 'Task completed (auto-approved for publish)', { progress: 100 });
+    }
     return this.transition(id, actor, TaskStatus.TESTING, 'TASK_SUBMIT_TESTING', 'Task submitted for testing');
   }
 
@@ -189,8 +250,8 @@ export class TasksService {
     this.stateMachine.assertTransition(actor.role, task.status, to);
 
     const notifyUserId = actor.role === Role.ADMIN ? task.assignedToId : task.createdById;
-    const result = await this.prisma.$transaction(async (tx) =>
-      this.repo.transitionInTx(tx, {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const res = await this.repo.transitionInTx(tx, {
         taskId: id,
         fromStatus: task.status,
         toStatus: to,
@@ -209,8 +270,10 @@ export class TasksService {
           entityId: id,
           metadata: { from: task.status, to },
         },
-      }),
-    );
+      });
+      await this.workflow.handleTaskTransition(tx, res.task, task.status, to, actor.id);
+      return res;
+    });
     this.gateway.emitToUser(notifyUserId, 'notification', result.notification);
     return result.task;
   }
@@ -225,6 +288,51 @@ export class TasksService {
       throw new NotFoundException('Task not found');
     }
     return task;
+  }
+
+
+  async getTaskFlow(id: string, actor: AuthUser) {
+    const task = await this.getOwnedOrAdminTask(id, actor);
+    // Find the root
+    const rootId = task.rootTaskId || task.id;
+    // Get all tasks in this flow
+    const flowTasks = await this.prisma.task.findMany({
+      where: {
+        OR: [
+          { id: rootId },
+          { rootTaskId: rootId }
+        ]
+      },
+      include: {
+        assignedTo: { select: { id: true, name: true, avatarUrl: true } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    
+    // Sort them so parent comes before child
+    const sorted = [];
+    const map = new Map(flowTasks.map(t => [t.id, t]));
+    
+    // Find root
+    let current = flowTasks.find(t => !t.parentTaskId || t.id === rootId);
+    if (!current) current = flowTasks[0]; // fallback
+    
+    // Build tree/chain (Assuming mostly linear)
+    while (current) {
+      sorted.push(current);
+      // find next
+      const next = flowTasks.find(t => t.parentTaskId === current?.id);
+      current = next;
+    }
+    
+    // Fallback if some got left out (e.g., branches due to rejection)
+    for (const t of flowTasks) {
+      if (!sorted.find(s => s.id === t.id)) {
+         sorted.push(t);
+      }
+    }
+    
+    return sorted;
   }
 
   async addComment(id: string, body: string, actor: AuthUser) {

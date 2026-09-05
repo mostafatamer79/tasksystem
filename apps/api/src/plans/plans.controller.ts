@@ -68,14 +68,14 @@ export class PlansController {
 
   @Post(':id/tasks')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Add a task to a plan (Admin only)' })
+  @ApiOperation({ summary: 'Add a task to a plan, including published plans (Admin only)' })
   addTask(@Param('id') id: string, @Body() dto: CreatePlanTaskDto, @CurrentUser() user: AuthUser) {
     return this.plansService.addTask(id, dto, user);
   }
 
   @Put(':id/tasks')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Bulk upsert tasks for a plan (Admin only)' })
+  @ApiOperation({ summary: 'Bulk upsert tasks for a plan, including published plans (Admin only)' })
   upsertTasks(
     @Param('id') id: string,
     @Body() dtos: UpsertPlanTaskDto[],
@@ -86,7 +86,7 @@ export class PlansController {
 
   @Patch(':id/tasks/:taskId')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Update a specific plan task (Admin only)' })
+  @ApiOperation({ summary: 'Update a specific plan task, including published plans (Admin only)' })
   updateTask(
     @Param('id') planId: string,
     @Param('taskId') taskId: string,
@@ -98,7 +98,7 @@ export class PlansController {
 
   @Delete(':id/tasks/:taskId')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Remove a specific plan task (Admin only)' })
+  @ApiOperation({ summary: 'Remove a plan entry while preserving its linked task (Admin only)' })
   removeTask(
     @Param('id') planId: string,
     @Param('taskId') taskId: string,
@@ -107,11 +107,36 @@ export class PlansController {
     return this.plansService.removeTask(planId, taskId, user);
   }
 
+  @Delete(':id/tasks')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Remove all plan entries while preserving linked tasks (Admin only)' })
+  removeAllTasks(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.plansService.removeAllTasks(id, user);
+  }
+
+  @Delete(':id/tasks/:taskId/with-task')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Permanently delete a task and its plan entry (Admin only)' })
+  removeTaskAndLinkedTask(
+    @Param('id') planId: string,
+    @Param('taskId') taskId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.plansService.removeTaskAndLinkedTask(planId, taskId, user);
+  }
+
   @Post(':id/submit')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Submit plan for review (Admin only)' })
   submit(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.plansService.submit(id, user);
+  }
+
+  @Post(':id/send')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Send a plan: create and assign all tasks immediately (Admin only)' })
+  send(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.plansService.send(id, user);
   }
 
   @Post(':id/publish')
