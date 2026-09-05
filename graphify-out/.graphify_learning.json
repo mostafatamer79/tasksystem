@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T16:48:59.890103+00:00",
+  "generated_at": "2026-09-05T17:10:22.558304+00:00",
   "nodes": {
     "apps_api_src_workflow_workflow_service_workflowservice_spawnautomatedchildtask": {
       "code_fingerprint": "f6b5a8a41c0569f7c8f59646cdacc7c8eba85647225b692b3531413acbec636e",
@@ -12,7 +12,7 @@
           "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
         }
       ],
-      "score": 0.999450537,
+      "score": 0.999107776,
       "source_file": "apps/api/src/workflow/workflow.service.ts",
       "status": "tentative",
       "uses": 1
@@ -28,7 +28,7 @@
           "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
         }
       ],
-      "score": 0.999450537,
+      "score": 0.999107776,
       "source_file": "apps/api/src/workflow/workflow-templates.ts",
       "status": "tentative",
       "uses": 1
@@ -44,7 +44,7 @@
           "q": "Trace bulk task deletion, dashboard metrics, plan task deduplication, and workflow templates"
         }
       ],
-      "score": 0.999450537,
+      "score": 0.999107776,
       "source_file": "apps/web/src/app/[locale]/(app)/dashboard/page.tsx",
       "status": "tentative",
       "uses": 1
