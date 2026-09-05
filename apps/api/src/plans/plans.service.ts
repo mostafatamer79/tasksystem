@@ -101,7 +101,10 @@ export class PlansService {
       const upserted = await this.repository.upsertTasksInTx(tx, id, tasks);
 
       for (const t of upserted) {
-        if (t.taskId) continue;
+        if (t.taskId) {
+          await this.workflow.reconcileLinkedPlanTask(tx, t);
+          continue;
+        }
 
         if (plan.status === PlanStatus.PUBLISHED) {
           const newTaskId = await this.createTaskFromPlanTask(tx, t, actor.id);
@@ -136,6 +139,11 @@ export class PlansService {
     return this.prisma.$transaction(async (tx) => {
       const planTask = await this.repository.addTaskInTx(tx, id, dto);
 
+      if (planTask.taskId) {
+        await this.workflow.reconcileLinkedPlanTask(tx, planTask);
+        return planTask;
+      }
+
       if (plan.status === PlanStatus.PUBLISHED && !planTask.taskId) {
         const newTaskId = await this.createTaskFromPlanTask(tx, planTask, actor.id);
         if (newTaskId) {
@@ -158,7 +166,10 @@ export class PlansService {
 
     return this.prisma.$transaction(async (tx) => {
       const updatedTask = await this.repository.updateTaskInTx(tx, taskId, dto);
-      if (updatedTask.taskId) return updatedTask;
+      if (updatedTask.taskId) {
+        await this.workflow.reconcileLinkedPlanTask(tx, updatedTask);
+        return updatedTask;
+      }
 
       if (plan.status === PlanStatus.PUBLISHED) {
         const newTaskId = await this.createTaskFromPlanTask(tx, updatedTask, actor.id);
@@ -328,6 +339,7 @@ export class PlansService {
       const task = await tx.task.create({
         data: {
           title: planTask.nextTaskTitle || planTask.title,
+          workflowTemplateId: planTask.workflowTemplateId,
           description: planTask.nextTaskDescription || planTask.content || '',
           priority: planTask.nextTaskPriority || Priority.MEDIUM,
           status: TaskStatus.TODO,

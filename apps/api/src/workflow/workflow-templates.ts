@@ -4,11 +4,17 @@ export interface WorkflowTemplate {
   id: string;
   name: string;
   description: string;
+  defaultTitle?: string;
+  defaultDueDays?: number;
+  defaultPriority?: Priority;
   icon?: string;
   triggerStatus: 'COMPLETED' | 'TESTING' | 'PUBLISHED';
   requiresPublishing: boolean;
   nextTasks: WorkflowTemplateTask[];
 }
+
+export const TOMORROW_APPOINTMENTS_TEMPLATE_ID = 'tomorrow-appointments';
+export const TOMORROW_APPOINTMENTS_TITLE = 'مواعيد بكرا';
 
 export interface WorkflowTemplateTask {
   title: string;
@@ -22,6 +28,17 @@ export interface WorkflowTemplateTask {
 }
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: TOMORROW_APPOINTMENTS_TEMPLATE_ID,
+    name: TOMORROW_APPOINTMENTS_TITLE,
+    description: 'Create or refresh tomorrow appointments without duplicating the active task in the same plan.',
+    defaultTitle: TOMORROW_APPOINTMENTS_TITLE,
+    defaultDueDays: 1,
+    defaultPriority: Priority.MEDIUM,
+    triggerStatus: 'COMPLETED',
+    requiresPublishing: true,
+    nextTasks: [],
+  },
   {
     id: 'lesson-plan-review',
     name: 'Lesson Plan Review & Publish',

@@ -24,6 +24,11 @@ export class CreateTaskDto {
   @MaxLength(200)
   title!: string;
 
+  @ApiPropertyOptional({ description: 'Stable built-in workflow template identifier' })
+  @IsOptional()
+  @IsString()
+  workflowTemplateId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -164,6 +169,11 @@ export class UpdateTaskDto {
   @IsNotEmpty()
   @MaxLength(200)
   title?: string;
+
+  @ApiPropertyOptional({ description: 'Stable built-in workflow template identifier' })
+  @IsOptional()
+  @IsString()
+  workflowTemplateId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

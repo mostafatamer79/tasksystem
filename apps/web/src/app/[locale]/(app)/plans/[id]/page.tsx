@@ -143,6 +143,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
         date: new Date(t.date).toISOString(),
         dayName: t.dayName ?? undefined,
         title: t.title,
+        workflowTemplateId: t.workflowTemplateId ?? undefined,
         content: t.content ?? undefined,
         material: t.material ?? undefined,
         notes: t.notes ?? undefined,
@@ -184,6 +185,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
       date: new Date(task.dueDate!).toISOString(),
       dayName: null,
       title: task.title,
+      workflowTemplateId: task.workflowTemplateId,
       content: null,
       material: null,
       notes: null,
@@ -210,6 +212,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
           id: t.id?.startsWith('temp-') ? undefined : t.id,
           date: new Date(t.date).toISOString(),
           title: t.title,
+          workflowTemplateId: t.workflowTemplateId ?? undefined,
           taskId: t.taskId ?? undefined,
           sortOrder: idx,
         }))

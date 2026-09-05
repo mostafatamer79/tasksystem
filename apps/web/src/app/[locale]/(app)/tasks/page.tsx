@@ -12,6 +12,7 @@ import {
   useEmployees,
   useTaskAction,
   useBulkDeleteTasks,
+  useClearDashboardArchive,
   useRemovePlanTaskFromAnyPlan,
   errorMessage,
 } from '@/lib/hooks';
@@ -21,10 +22,10 @@ import { DataTable, type Column } from '@/components/shared/data-table';
 import { StatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Pagination } from '@/components/shared/pagination';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/input';
+import { Input, Label, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { ConfirmDialog } from '@/components/ui/dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { TaskFormDialog } from '@/components/tasks/task-form-dialog';
 import { motion } from 'framer-motion';
 
@@ -52,7 +53,13 @@ export default function TasksPage() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const bulkDelete = useBulkDeleteTasks();
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
-  const [bulkMode, setBulkMode] = useState<'selected' | 'completed' | 'all'>('selected');
+  const [bulkScope, setBulkScope] = useState<'selected' | 'all'>('selected');
+  const [deleteStatus, setDeleteStatus] = useState<TaskStatus | ''>('');
+  const [deleteFromDate, setDeleteFromDate] = useState('');
+  const [deleteToDate, setDeleteToDate] = useState('');
+  const [removeFromDashboard, setRemoveFromDashboard] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const clearDashboardArchive = useClearDashboardArchive();
 
   const query = {
     page,
@@ -69,6 +76,37 @@ export default function TasksPage() {
   const deleteTask = useDeleteTask();
   const removePlanTask = useRemovePlanTaskFromAnyPlan();
   const taskAction = useTaskAction();
+  const isDeleteRangeInvalid = Boolean(
+    deleteFromDate && deleteToDate && deleteFromDate > deleteToDate,
+  );
+  const deleteStatusKey = deleteStatus === 'IN_PROGRESS'
+    ? 'inProgress'
+    : deleteStatus === 'WAITING_FOR_PUBLISHING'
+      ? 'waitingForPublishing'
+      : deleteStatus.toLowerCase();
+  const deleteSummary = t('bulkDeleteSummary', {
+    scope: bulkScope === 'selected' ? t('selectedTasks', { count: selectedKeys.size }) : t('allTasks'),
+    status: bulkScope === 'selected'
+      ? t('selectedRowsOnly')
+      : deleteStatus
+        ? tb(deleteStatusKey)
+        : t('allStatuses'),
+    period: bulkScope === 'selected'
+      ? t('selectedRowsOnly')
+      : deleteFromDate || deleteToDate
+        ? t('selectedDeletePeriod', { from: deleteFromDate || '…', to: deleteToDate || '…' })
+        : t('allPeriodsShort'),
+    dashboard: removeFromDashboard ? t('dashboardExcluded') : t('dashboardPreserved'),
+  });
+
+  const openBulkDelete = (scope: 'selected' | 'all', initialStatus: TaskStatus | '' = '') => {
+    setBulkScope(scope);
+    setDeleteStatus(initialStatus);
+    setDeleteFromDate('');
+    setDeleteToDate('');
+    setRemoveFromDashboard(false);
+    setBulkConfirmOpen(true);
+  };
 
   const onSort = (key: string) => {
     if (sortBy === key) {
@@ -245,32 +283,30 @@ export default function TasksPage() {
             {selectedKeys.size > 0 && (
               <Button
                 variant="destructive"
-                onClick={() => {
-                  setBulkMode('selected');
-                  setBulkConfirmOpen(true);
-                }}
+                onClick={() => openBulkDelete('selected')}
               >
-                <Trash2 className="h-4 w-4" /> Delete Selected ({selectedKeys.size})
+                <Trash2 className="h-4 w-4" /> {t('deleteSelected', { count: selectedKeys.size })}
               </Button>
             )}
             <Button
               variant="outline"
               className="text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive"
-              onClick={() => {
-                setBulkMode('completed');
-                setBulkConfirmOpen(true);
-              }}
+              onClick={() => openBulkDelete('all', 'COMPLETED')}
             >
-              <Trash2 className="h-4 w-4" /> Clear All Completed
+              <Trash2 className="h-4 w-4" /> {t('deleteCompleted')}
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                setBulkMode('all');
-                setBulkConfirmOpen(true);
-              }}
+              onClick={() => openBulkDelete('all')}
             >
               <Trash2 className="h-4 w-4" /> {t('deleteAllTasks')}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => setArchiveConfirmOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" /> {t('clearDashboardArchive')}
             </Button>
             <Button
               onClick={() => {
@@ -396,34 +432,132 @@ export default function TasksPage() {
         }}
       />
 
-      <ConfirmDialog
+      <Dialog
         open={bulkConfirmOpen}
         onOpenChange={setBulkConfirmOpen}
-        title="Confirm Bulk Delete"
-        description={
-          bulkMode === 'completed'
-            ? 'Are you sure you want to delete ALL completed tasks? Their statistics will be permanently archived.'
-            : bulkMode === 'all'
-              ? t('deleteAllTasksDescription')
-            : `Are you sure you want to delete ${selectedKeys.size} selected tasks? Their statistics will be permanently archived.`
-        }
-        confirmLabel="Delete Tasks"
-        destructive
-        loading={bulkDelete.isPending}
-        onConfirm={async () => {
+        title={t('bulkDeleteTitle')}
+        description={deleteSummary}
+      >
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="delete-scope">{t('deleteScope')}</Label>
+            <Select
+              id="delete-scope"
+              value={bulkScope}
+              onChange={(event) => setBulkScope(event.target.value as 'selected' | 'all')}
+            >
+              <option value="selected" disabled={selectedKeys.size === 0}>
+                {t('selectedTasks', { count: selectedKeys.size })}
+              </option>
+              <option value="all">{t('allTasks')}</option>
+            </Select>
+          </div>
+
+          {bulkScope === 'all' && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="delete-status">{t('deleteStatus')}</Label>
+                <Select
+                  id="delete-status"
+                  value={deleteStatus}
+                  onChange={(event) => setDeleteStatus(event.target.value as TaskStatus | '')}
+                >
+                  <option value="">{t('allStatuses')}</option>
+                  {TASK_STATUSES.map((taskStatus) => {
+                    const key = taskStatus === 'IN_PROGRESS'
+                      ? 'inProgress'
+                      : taskStatus === 'WAITING_FOR_PUBLISHING'
+                        ? 'waitingForPublishing'
+                        : taskStatus.toLowerCase();
+                    return <option key={taskStatus} value={taskStatus}>{tb(key)}</option>;
+                  })}
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>{t('deletePeriod')}</Label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="delete-from-date" className="mb-1 block text-xs text-muted-foreground">
+                      {t('fromDate')}
+                    </Label>
+                    <Input id="delete-from-date" type="date" value={deleteFromDate} onChange={(event) => setDeleteFromDate(event.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="delete-to-date" className="mb-1 block text-xs text-muted-foreground">
+                      {t('toDate')}
+                    </Label>
+                    <Input id="delete-to-date" type="date" value={deleteToDate} onChange={(event) => setDeleteToDate(event.target.value)} />
+                  </div>
+                </div>
+                {!deleteFromDate && !deleteToDate && (
+                  <p className="text-xs text-muted-foreground">{t('allPeriods')}</p>
+                )}
+                {isDeleteRangeInvalid && <p className="text-xs text-destructive">{t('invalidDeletePeriod')}</p>}
+              </div>
+            </>
+          )}
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4"
+              checked={removeFromDashboard}
+              onChange={(event) => setRemoveFromDashboard(event.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-medium">{t('removeFromDashboard')}</span>
+              <span className="block text-xs text-muted-foreground">{t('removeFromDashboardDescription')}</span>
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setBulkConfirmOpen(false)}>{tCommon('cancel')}</Button>
+            <Button
+              variant="destructive"
+              disabled={bulkDelete.isPending || isDeleteRangeInvalid || (bulkScope === 'selected' && selectedKeys.size === 0)}
+              onClick={async () => {
           try {
-            await bulkDelete.mutateAsync(
-              bulkMode === 'completed'
-                ? { allCompleted: true }
-                : bulkMode === 'all'
-                  ? { all: true }
-                  : { ids: Array.from(selectedKeys) }
+            const result = await bulkDelete.mutateAsync(
+              bulkScope === 'selected'
+                ? { ids: Array.from(selectedKeys), removeFromDashboard }
+                : {
+                    all: true,
+                    status: deleteStatus || undefined,
+                    fromDate: deleteFromDate || undefined,
+                    toDate: deleteToDate || undefined,
+                    removeFromDashboard,
+                  },
             );
-            toast.success('Tasks successfully deleted and archived.');
+            toast.success(t('bulkDeleteSuccess', { count: result.deletedCount }));
             setSelectedKeys(new Set());
             setBulkConfirmOpen(false);
           } catch (err) {
-            toast.error(errorMessage(err, 'Failed to delete tasks'));
+            toast.error(errorMessage(err, t('bulkDeleteFailed')));
+          }
+              }}
+            >
+              {bulkDelete.isPending ? tCommon('loading') : t('deleteTasks')}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <ConfirmDialog
+        open={archiveConfirmOpen}
+        onOpenChange={setArchiveConfirmOpen}
+        title={t('clearDashboardArchiveTitle')}
+        description={t('clearDashboardArchiveDescription')}
+        confirmLabel={t('clearDashboardArchive')}
+        destructive
+        loading={clearDashboardArchive.isPending}
+        onConfirm={async () => {
+          try {
+            const result = await clearDashboardArchive.mutateAsync();
+            toast.success(t('clearDashboardArchiveSuccess', { count: result.deletedCount }));
+            setArchiveConfirmOpen(false);
+          } catch (err) {
+            toast.error(errorMessage(err, t('clearDashboardArchiveFailed')));
           }
         }}
       />

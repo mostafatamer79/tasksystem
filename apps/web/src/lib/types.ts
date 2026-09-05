@@ -33,6 +33,7 @@ export interface TaskUserRef {
 export interface Task {
   id: string;
   title: string;
+  workflowTemplateId: string | null;
   description: string | null;
   priority: Priority;
   status: TaskStatus;
@@ -79,10 +80,27 @@ export interface WorkflowTemplate {
   id: string;
   name: string;
   description: string;
+  defaultTitle?: string;
+  defaultDueDays?: number;
+  defaultPriority?: Priority;
   icon?: string;
   triggerStatus: 'COMPLETED' | 'TESTING' | 'PUBLISHED';
   requiresPublishing: boolean;
   nextTasks: NextTaskDefinition[];
+}
+
+export interface BulkDeleteTasksInput {
+  ids?: string[];
+  all?: boolean;
+  allCompleted?: boolean;
+  status?: TaskStatus;
+  fromDate?: string;
+  toDate?: string;
+  removeFromDashboard?: boolean;
+}
+
+export interface DeleteTasksResult {
+  deletedCount: number;
 }
 
 export interface TaskHistoryEntry {
@@ -142,6 +160,7 @@ export interface PlanTask {
   date: string;
   dayName: string | null;
   title: string;
+  workflowTemplateId: string | null;
   content: string | null;
   material: string | null;
   notes: string | null;

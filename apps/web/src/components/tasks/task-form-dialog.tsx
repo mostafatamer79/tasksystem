@@ -215,6 +215,7 @@ export function TaskFormDialog({
       setActiveTab('details');
       reset({
         title: task.title,
+        workflowTemplateId: task.workflowTemplateId ?? undefined,
         description: task.description ?? '',
         priority: task.priority,
         dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
@@ -231,6 +232,7 @@ export function TaskFormDialog({
       setActiveTab('details');
       reset({
         title: initialTitle ?? '',
+        workflowTemplateId: undefined,
         description: '',
         priority: 'MEDIUM',
         dueDate: initialDueDate ?? '',
@@ -262,6 +264,23 @@ export function TaskFormDialog({
 
   const applyTemplate = (template: WorkflowTemplate) => {
     setValue('isAutomated', true);
+    setValue('workflowTemplateId', template.id, { shouldDirty: true });
+    if (template.defaultTitle) {
+      setValue('title', template.defaultTitle, { shouldDirty: true });
+    }
+    if (template.defaultPriority) {
+      setValue('priority', template.defaultPriority, { shouldDirty: true });
+    }
+    if (template.defaultDueDays !== undefined) {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + template.defaultDueDays);
+      const dateOnly = [
+        dueDate.getFullYear(),
+        String(dueDate.getMonth() + 1).padStart(2, '0'),
+        String(dueDate.getDate()).padStart(2, '0'),
+      ].join('-');
+      setValue('dueDate', dateOnly, { shouldDirty: true });
+    }
     setValue('triggerStatus', template.triggerStatus);
     setValue('requiresPublishing', template.requiresPublishing);
     setValue('nextTasks', template.nextTasks);
@@ -278,6 +297,7 @@ export function TaskFormDialog({
       estimatedHours: values.estimatedHours === undefined ? undefined : Number(values.estimatedHours),
       // Strip all workflow configuration when automation is disabled so the task can be created without a flow.
       isAutomated: isAutomatedFlow,
+      workflowTemplateId: isAutomatedFlow ? values.workflowTemplateId : undefined,
       triggerStatus: isAutomatedFlow ? values.triggerStatus || 'COMPLETED' : undefined,
       requiresPublishing: isAutomatedFlow ? values.requiresPublishing : undefined,
       nextTasks: isAutomatedFlow && values.nextTasks && values.nextTasks.length > 0 ? values.nextTasks : undefined,
