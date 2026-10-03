@@ -2,17 +2,17 @@
   "name": "tasksystem",
   "version": "1.0.0",
   "private": true,
-  "description": "Enterprise Task Management System — monorepo",
+  "description": "Enterprise Task Management System \u2014 monorepo",
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
     "vercel-build": "npm run build -w apps/web",
-    "dev:api": "npm run start:dev -w apps/api",
-    "build:api": "npm run build -w apps/api",
+    "dev:api": "node init && npm run start:dev -w apps/api",
+    "build:api": "node init && npm run build -w apps/api",
     "test:api": "npm run test -w apps/api",
-    "dev:web": "npm run dev -w apps/web",
-    "build:web": "npm run build -w apps/web",
+    "dev:web": "node init && npm run dev -w apps/web",
+    "build:web": "node init && npm run build -w apps/web",
     "lint:web": "npm run lint -w apps/web",
     "prepare": "node -e \"if (!process.env.VERCEL) { try { require('child_process').execSync('husky', { stdio: 'inherit' }); } catch (e) {} }\""
   },

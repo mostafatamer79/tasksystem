@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog } from '@/components/ui/dialog';
+import { Pagination } from '@/components/shared/pagination';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
@@ -164,7 +165,16 @@ export default function PlansPage() {
         </motion.div>
       )}
 
-      {/* Pagination Placeholder (You can add real pagination here using plansData) */}
+      {plansData && plansData.totalPages > 1 && (
+        <div className="mt-8">
+          <Pagination
+            page={plansData.page}
+            totalPages={plansData.totalPages}
+            total={plansData.total}
+            onPageChange={setPage}
+          />
+        </div>
+      )}
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title={t('newPlan')} description={t('subtitle')}>
         <form onSubmit={handleCreate}>
